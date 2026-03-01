@@ -89,7 +89,6 @@ export function AppShell() {
           <PanelGrid
             panels={panels}
             layout={activeWorkspace.layout}
-            onDividerLongPress={openConfigurePanels}
           />
         )}
         {!activeWorkspace && (

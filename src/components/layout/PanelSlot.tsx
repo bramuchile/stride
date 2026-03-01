@@ -12,12 +12,9 @@ import type { Panel } from "@/types";
 interface Props {
   panel: Panel;
   layout: string;
-  isLast: boolean;
-  /** Manejado por PanelGrid — combina long-press (3 s → editar) y drag (resize) */
-  onDividerMouseDown: (e: React.MouseEvent) => void;
 }
 
-export function PanelSlot({ panel, layout, isLast, onDividerMouseDown }: Props) {
+export function PanelSlot({ panel, layout }: Props) {
   const [overlayCollapsed, setOverlayCollapsed] = useState(false);
   const { webviewMap } = useWorkspaceStore();
 
@@ -125,23 +122,6 @@ export function PanelSlot({ panel, layout, isLast, onDividerMouseDown }: Props) 
         <WidgetPanel panel={panel} />
       )}
 
-      {/* Franja de arrastre/long-press — lógica manejada por PanelGrid.
-          right: 0 asegura que quede completamente dentro del panel (overflow:hidden no lo recorta).
-          El anillo de progreso y la lógica se renderizan en PanelGrid vía portal. */}
-      {!isLast && (
-        <div
-          style={{
-            position: "absolute",
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 6,
-            zIndex: 20,
-            cursor: "col-resize",
-          }}
-          onMouseDown={onDividerMouseDown}
-        />
-      )}
     </div>
   );
 }
