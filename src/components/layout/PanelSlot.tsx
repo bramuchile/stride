@@ -27,17 +27,22 @@ export function PanelSlot({ panel, layout, isLast, onDividerMouseDown }: Props) 
     panel.overlay_position &&
     panel.overlay_height_pct;
 
-  // Al colapsar/expandir un overlay, reposicionar el WebView2 para que ocupe el espacio correcto
+  // Altura fija de la barra colapsada en px — debe coincidir con el height del PanelOverlayCollapsedBar
+  const COLLAPSED_BAR_PX = 28;
+
+  // Al colapsar/expandir un overlay, reposicionar el WebView2 para que ocupe el espacio correcto.
+  // Al colapsar: mantener overlay_position pero usar overlay_height_px=28 para que el WebView2
+  // deje exactamente 28 px libres donde React renderiza la barra "expandir".
   const handleCollapse = useCallback(async () => {
     setOverlayCollapsed(true);
-    const existingLabel = webviewMap[panel.id];
-    if (existingLabel) {
+    if (webviewMap[panel.id]) {
       await invoke("resize_panel_webviews", {
         panels: [{
           panel_id: panel.id,
           position: panel.position,
-          overlay_position: null,
+          overlay_position: panel.overlay_position ?? null,
           overlay_height_pct: null,
+          overlay_height_px: COLLAPSED_BAR_PX,
         }],
         layout,
         sidebarWidth: SIDEBAR_WIDTH,
@@ -48,14 +53,14 @@ export function PanelSlot({ panel, layout, isLast, onDividerMouseDown }: Props) 
 
   const handleExpand = useCallback(async () => {
     setOverlayCollapsed(false);
-    const existingLabel = webviewMap[panel.id];
-    if (existingLabel) {
+    if (webviewMap[panel.id]) {
       await invoke("resize_panel_webviews", {
         panels: [{
           panel_id: panel.id,
           position: panel.position,
           overlay_position: panel.overlay_position ?? null,
           overlay_height_pct: panel.overlay_height_pct ?? null,
+          overlay_height_px: null,
         }],
         layout,
         sidebarWidth: SIDEBAR_WIDTH,

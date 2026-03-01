@@ -25,42 +25,42 @@ export function useWebviews(
 
       const webPanels = panels.filter((p) => p.type === "WEB" && p.url);
 
-      for (const panel of webPanels) {
-        const existingLabel = webviewMap[panel.id];
+      // Separar paneles existentes (ya tienen webview) de nuevos (hay que crear)
+      const existingPanels = webPanels.filter((p) => webviewMap[p.id]);
+      const newPanels = webPanels.filter((p) => !webviewMap[p.id]);
 
-        if (existingLabel) {
-          // Webview ya existe: si la URL cambió desde la última vez, navegar antes de mostrar
-          if (webviewUrlMap[panel.id] !== panel.url) {
-            await invoke("navigate_panel_webview", { panelId: panel.id, url: panel.url! }).catch(console.error);
-            setWebviewUrl(panel.id, panel.url!);
-          }
-          await invoke("show_panel_webviews", { panelIds: [panel.id] });
-        } else {
-          // Primer acceso a este panel: crear webview nuevo
-          const label = await invoke<string>("create_panel_webview", {
-            panelId: panel.id,
-            url: panel.url!,
-            layout,
-            position: panel.position,
-            sidebarWidth: SIDEBAR_WIDTH,
-            headerHeight: HEADER_HEIGHT,
-            overlayPosition: panel.overlay_position ?? null,
-            overlayHeightPct: panel.overlay_height_pct ?? null,
-          });
-          registerWebview(panel.id, label);
+      // Navegar los existentes si la URL cambió
+      for (const panel of existingPanels) {
+        if (webviewUrlMap[panel.id] !== panel.url) {
+          await invoke("navigate_panel_webview", { panelId: panel.id, url: panel.url! }).catch(console.error);
           setWebviewUrl(panel.id, panel.url!);
         }
       }
 
-      // Reposicionar los webviews existentes del workspace activo
-      const toResize: PanelLayoutInfo[] = webPanels
-        .filter((p) => webviewMap[p.id])
-        .map((p) => ({
-          panel_id: p.id,
-          position: p.position,
-          overlay_position: p.overlay_position ?? null,
-          overlay_height_pct: p.overlay_height_pct ?? null,
-        }));
+      // Crear los nuevos (ya quedan posicionados correctamente desde create_panel_webview)
+      for (const panel of newPanels) {
+        const label = await invoke<string>("create_panel_webview", {
+          panelId: panel.id,
+          url: panel.url!,
+          layout,
+          position: panel.position,
+          sidebarWidth: SIDEBAR_WIDTH,
+          headerHeight: HEADER_HEIGHT,
+          overlayPosition: panel.overlay_position ?? null,
+          overlayHeightPct: panel.overlay_height_pct ?? null,
+        });
+        registerWebview(panel.id, label);
+        setWebviewUrl(panel.id, panel.url!);
+      }
+
+      // Reubicar los existentes a sus bounds correctos ANTES de mostrarlos
+      // (evita el flash de posición incorrecta al cambiar de workspace)
+      const toResize: PanelLayoutInfo[] = existingPanels.map((p) => ({
+        panel_id: p.id,
+        position: p.position,
+        overlay_position: p.overlay_position ?? null,
+        overlay_height_pct: p.overlay_height_pct ?? null,
+      }));
 
       if (toResize.length > 0) {
         await invoke("resize_panel_webviews", {
@@ -68,6 +68,13 @@ export function useWebviews(
           layout,
           sidebarWidth: SIDEBAR_WIDTH,
           headerHeight: HEADER_HEIGHT,
+        });
+      }
+
+      // Mostrar los webviews existentes ya en la posición correcta
+      if (existingPanels.length > 0) {
+        await invoke("show_panel_webviews", {
+          panelIds: existingPanels.map((p) => p.id),
         });
       }
 

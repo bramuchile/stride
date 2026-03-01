@@ -27,6 +27,9 @@ export interface PanelLayoutInfo {
   position: number;
   overlay_position?: string | null;
   overlay_height_pct?: number | null;
+  // Altura fija en píxeles para el overlay (tiene prioridad sobre overlay_height_pct)
+  // Usada para la barra colapsada (28 px fijos) sin depender del tamaño de ventana
+  overlay_height_px?: number | null;
   // Fracciones personalizadas de ancho (0.0–1.0) para paneles redimensionados manualmente
   custom_x_frac?: number | null;
   custom_width_frac?: number | null;
