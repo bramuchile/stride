@@ -12,7 +12,7 @@ export function useWebviews(
   layout: string,
   activeWorkspaceId: string | null
 ) {
-  const { webviewMap, registerWebview } = useWorkspaceStore();
+  const { webviewMap, webviewUrlMap, registerWebview, setWebviewUrl } = useWorkspaceStore();
   // Referencia para detectar cambio de workspace
   const prevWorkspaceRef = useRef<string | null>(null);
 
@@ -29,7 +29,11 @@ export function useWebviews(
         const existingLabel = webviewMap[panel.id];
 
         if (existingLabel) {
-          // Webview ya existe: solo mostrar (carga diferida activa)
+          // Webview ya existe: si la URL cambió desde la última vez, navegar antes de mostrar
+          if (webviewUrlMap[panel.id] !== panel.url) {
+            await invoke("navigate_panel_webview", { panelId: panel.id, url: panel.url! }).catch(console.error);
+            setWebviewUrl(panel.id, panel.url!);
+          }
           await invoke("show_panel_webviews", { panelIds: [panel.id] });
         } else {
           // Primer acceso a este panel: crear webview nuevo
@@ -44,6 +48,7 @@ export function useWebviews(
             overlayHeightPct: panel.overlay_height_pct ?? null,
           });
           registerWebview(panel.id, label);
+          setWebviewUrl(panel.id, panel.url!);
         }
       }
 

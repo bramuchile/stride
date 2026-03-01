@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Search, RotateCcw } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { AddressBar } from "./AddressBar";
+import { useUpdatePanel } from "@/hooks/usePanels";
+import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import type { Panel } from "@/types";
 
 interface Props {
@@ -21,13 +23,20 @@ function getDomain(url?: string): string {
 export function PanelHeader({ panel }: Props) {
   const [showAddressBar, setShowAddressBar] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(panel.url ?? "");
+  const updatePanel = useUpdatePanel();
+  const { setWebviewUrl } = useWorkspaceStore();
 
   const handleNavigate = async (newUrl: string) => {
     setCurrentUrl(newUrl);
+    // Navegar el WebView2 nativo
     await invoke("navigate_panel_webview", {
       panelId: panel.id,
       url: newUrl,
     }).catch(console.error);
+    // Persistir en DB para que la URL sobreviva reinicios
+    updatePanel.mutateAsync({ ...panel, url: newUrl }).catch(console.error);
+    // Sincronizar el store para evitar re-navegación innecesaria al cambiar workspace
+    setWebviewUrl(panel.id, newUrl);
   };
 
   const handleReload = async () => {
