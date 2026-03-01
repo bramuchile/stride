@@ -177,7 +177,7 @@ export function PanelGrid({ panels, layout, onDividerLongPress }: Props) {
       <div
         ref={containerRef}
         className={gridClass}
-        style={{ gridTemplateColumns }}
+        style={{ gridTemplateColumns, gap: "1px", background: "var(--border)" }}
       >
         {sorted.map((panel, i) => (
           <PanelSlot

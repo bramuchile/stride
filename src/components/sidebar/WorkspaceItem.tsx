@@ -1,5 +1,10 @@
 import { useRef } from "react";
 import {
+  Briefcase, User, Code2, Palette, DollarSign, Mail,
+  Globe, Zap, Star, Home, BookOpen, Film, Music, Layout,
+  type LucideIcon,
+} from "lucide-react";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -16,8 +21,29 @@ interface Props {
   onEdit?: () => void;
 }
 
+// Mapear nombre del workspace a un icono Lucide según palabras clave
+function resolveIcon(name: string): LucideIcon | null {
+  const n = name.toLowerCase();
+  if (n.includes("work") || n.includes("trabajo") || n.includes("office")) return Briefcase;
+  if (n.includes("personal") || n.includes("me")) return User;
+  if (n.includes("dev") || n.includes("code") || n.includes("prog")) return Code2;
+  if (n.includes("design") || n.includes("diseño")) return Palette;
+  if (n.includes("finance") || n.includes("money") || n.includes("crypto")) return DollarSign;
+  if (n.includes("mail") || n.includes("email") || n.includes("inbox")) return Mail;
+  if (n.includes("web") || n.includes("browser")) return Globe;
+  if (n.includes("focus") || n.includes("deep")) return Zap;
+  if (n.includes("fav") || n.includes("star")) return Star;
+  if (n.includes("home") || n.includes("casa")) return Home;
+  if (n.includes("learn") || n.includes("study") || n.includes("curso")) return BookOpen;
+  if (n.includes("video") || n.includes("media") || n.includes("film")) return Film;
+  if (n.includes("music") || n.includes("musica")) return Music;
+  if (n.includes("layout") || n.includes("panel")) return Layout;
+  return null;
+}
+
 export function WorkspaceItem({ workspace, isActive, shortcutIndex, onSelect, onEdit }: Props) {
-  const icon = workspace.icon ?? workspace.name.charAt(0).toUpperCase();
+  const Icon = resolveIcon(workspace.name);
+  const emoji = workspace.icon ?? workspace.name.charAt(0).toUpperCase();
   // Evitar que onClick dispare onSelect justo después de completar el long-press
   const longPressCompleted = useRef(false);
 
@@ -29,24 +55,25 @@ export function WorkspaceItem({ workspace, isActive, shortcutIndex, onSelect, on
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative flex flex-col items-center w-full px-[9px]">
-          {/* Indicador activo — barra izquierda */}
+        <div className="relative flex flex-col items-center w-full px-[7px]">
+          {/* Indicador activo — barra izquierda con glow */}
           {isActive && (
             <div
               className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-sm"
-              style={{ width: "3px", height: "18px", background: "#5b7cf6" }}
+              style={{
+                width: "2.5px", height: "20px",
+                background: "var(--accent)",
+                boxShadow: "0 0 8px var(--accent)",
+              }}
             />
           )}
-          {/* Área del botón — onMouseLeave cancela si el ratón sale de esta zona.
-              Cubre el caso en que el usuario mueve el ratón fuera antes de soltar
-              (el mouseup podría caer en un WebView2 nativo y no llegar al React doc). */}
+          {/* Área del botón */}
           <div
-            style={{ position: "relative", width: 38, height: 38 }}
+            style={{ position: "relative", width: 36, height: 36 }}
             onMouseLeave={cancel}
           >
             <button
               onClick={() => {
-                // Ignorar el click sintético que el navegador emite tras el long-press
                 if (longPressCompleted.current) {
                   longPressCompleted.current = false;
                   return;
@@ -54,31 +81,32 @@ export function WorkspaceItem({ workspace, isActive, shortcutIndex, onSelect, on
                 onSelect();
               }}
               onMouseDown={start}
-              className="flex items-center justify-center rounded-[9px] transition-colors text-[17px] select-none w-full h-full"
+              className="flex items-center justify-center rounded-[10px] transition-all select-none w-full h-full"
               style={{
-                background: isActive ? "rgba(91,124,246,0.18)" : "transparent",
-                boxShadow: isActive ? "inset 0 0 0 1px rgba(91,124,246,0.35)" : "none",
+                background: isActive ? "var(--accent-glow)" : "transparent",
+                boxShadow: isActive ? "inset 0 0 0 1px rgba(124,106,247,0.25)" : "none",
                 border: "none",
                 cursor: "pointer",
+                color: isActive ? "var(--accent2)" : "var(--text3)",
+                fontSize: "17px",
               }}
               onMouseEnter={(e) => {
-                if (!isActive) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.background = "var(--elevated)";
+                  (e.currentTarget as HTMLElement).style.color = "var(--text2)";
+                }
               }}
               onMouseLeave={(e) => {
-                if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent";
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.background = "transparent";
+                  (e.currentTarget as HTMLElement).style.color = "var(--text3)";
+                }
               }}
             >
-              {icon}
+              {Icon ? <Icon size={18} strokeWidth={1.8} /> : emoji}
             </button>
-            {progress > 0 && <LongPressRing progress={progress} size={38} />}
+            {progress > 0 && <LongPressRing progress={progress} size={36} />}
           </div>
-          {/* Label debajo del icono */}
-          <span
-            className="font-mono truncate max-w-full"
-            style={{ fontSize: "8px", color: "#6b7280", letterSpacing: "0.05em", marginTop: "2px" }}
-          >
-            {workspace.name.toLowerCase().slice(0, 7)}
-          </span>
         </div>
       </TooltipTrigger>
       <TooltipContent side="right" className="flex items-center gap-2">

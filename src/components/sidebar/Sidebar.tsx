@@ -21,15 +21,36 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) 
   return (
     <TooltipProvider delayDuration={300}>
       <aside
-        className="flex h-full flex-shrink-0 flex-col items-center border-r border-border py-[10px]"
-        style={{ width: "56px", background: "#161719" }}
+        className="flex h-full flex-shrink-0 flex-col items-center py-[10px]"
+        style={{
+          width: "52px",
+          background: "var(--base-deep)",
+          borderRight: "1px solid var(--border)",
+          position: "relative",
+        }}
       >
+        {/* Línea decorativa degradada en el borde derecho */}
+        <div
+          style={{
+            position: "absolute", top: 0, right: 0, bottom: 0, width: 1,
+            background: "linear-gradient(to bottom, transparent, rgba(124,106,247,0.3), transparent)",
+            pointerEvents: "none",
+          }}
+        />
+
         {/* Logo */}
         <Tooltip>
           <TooltipTrigger asChild>
             <div
-              className="flex items-center justify-center rounded-lg text-white font-bold cursor-default select-none mb-4"
-              style={{ width: "30px", height: "30px", background: "#5b7cf6", fontSize: "13px", borderRadius: "8px", letterSpacing: "-0.03em" }}
+              className="flex items-center justify-center font-bold cursor-default select-none mb-[14px] flex-shrink-0"
+              style={{
+                width: "32px", height: "32px",
+                background: "linear-gradient(135deg, var(--accent) 0%, #9B6EF7 100%)",
+                borderRadius: "9px",
+                fontSize: "14px", color: "#fff",
+                letterSpacing: "-0.03em",
+                boxShadow: "0 4px 16px rgba(124,106,247,0.35)",
+              }}
             >
               S
             </div>
@@ -50,23 +71,27 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) 
           <TooltipTrigger asChild>
             <button
               onClick={onAddWorkspace}
-              className="flex items-center justify-center rounded-[9px] transition-colors font-mono mt-[6px]"
+              className="flex items-center justify-center transition-all flex-shrink-0 mt-[2px]"
               style={{
-                width: "38px",
-                height: "38px",
-                fontSize: "14px",
-                color: "#6b7280",
+                width: "32px", height: "32px",
+                borderRadius: "9px",
+                fontSize: "16px",
+                color: "var(--text3)",
                 background: "transparent",
-                border: "1px dashed #323539",
+                border: "1.5px dashed var(--border2)",
                 cursor: "pointer",
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-                (e.currentTarget as HTMLElement).style.color = "#e2e4e8";
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = "var(--accent)";
+                el.style.color = "var(--accent)";
+                el.style.background = "var(--accent-dim)";
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.background = "transparent";
-                (e.currentTarget as HTMLElement).style.color = "#6b7280";
+                const el = e.currentTarget as HTMLElement;
+                el.style.borderColor = "var(--border2)";
+                el.style.color = "var(--text3)";
+                el.style.background = "transparent";
               }}
             >
               +
@@ -76,28 +101,29 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) 
         </Tooltip>
 
         {/* Iconos de fondo */}
-        <div className="mt-auto flex flex-col items-center gap-1 pb-[6px] px-[9px]">
+        <div className="mt-auto flex flex-col items-center gap-1 pb-[6px] px-[7px]">
           {/* Focus Mode */}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                className="flex items-center justify-center rounded-lg transition-colors"
+                className="flex items-center justify-center rounded-lg transition-all"
                 style={{
                   width: "32px", height: "32px",
                   background: "transparent", border: "none",
-                  color: "#6b7280", cursor: "pointer",
-                  fontSize: "15px",
+                  color: "var(--text3)", cursor: "pointer",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-                  (e.currentTarget as HTMLElement).style.color = "#e2e4e8";
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = "var(--elevated)";
+                  el.style.color = "var(--text2)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "transparent";
-                  (e.currentTarget as HTMLElement).style.color = "#6b7280";
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = "transparent";
+                  el.style.color = "var(--text3)";
                 }}
               >
-                <Target size={15} />
+                <Target size={16} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">Focus Mode <span className="opacity-60 text-xs">(Fase 3)</span></TooltipContent>
@@ -107,23 +133,24 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                className="flex items-center justify-center rounded-lg transition-colors"
+                className="flex items-center justify-center rounded-lg transition-all"
                 style={{
                   width: "32px", height: "32px",
                   background: "transparent", border: "none",
-                  color: "#6b7280", cursor: "pointer",
-                  fontSize: "15px",
+                  color: "var(--text3)", cursor: "pointer",
                 }}
                 onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
-                  (e.currentTarget as HTMLElement).style.color = "#e2e4e8";
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = "var(--elevated)";
+                  el.style.color = "var(--text2)";
                 }}
                 onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLElement).style.background = "transparent";
-                  (e.currentTarget as HTMLElement).style.color = "#6b7280";
+                  const el = e.currentTarget as HTMLElement;
+                  el.style.background = "transparent";
+                  el.style.color = "var(--text3)";
                 }}
               >
-                <Settings size={15} />
+                <Settings size={16} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">Configuración</TooltipContent>
@@ -133,12 +160,21 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                className="flex items-center justify-center rounded-full font-semibold mt-[2px]"
+                className="flex items-center justify-center rounded-full font-semibold transition-all mt-[2px]"
                 style={{
                   width: "28px", height: "28px",
-                  background: "linear-gradient(135deg, #5b7cf6, #9b6ef3)",
-                  color: "#fff", fontSize: "11px",
+                  background: "linear-gradient(135deg, var(--accent), #C084FC)",
+                  color: "#fff", fontSize: "10px",
                   border: "none", cursor: "pointer",
+                  boxShadow: "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.boxShadow =
+                    "0 0 0 2px var(--base-deep), 0 0 0 3px var(--accent)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.boxShadow =
+                    "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)";
                 }}
               >
                 JD

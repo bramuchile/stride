@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { Titlebar } from "./Titlebar";
 import { PanelGrid } from "./PanelGrid";
 import { CreateWorkspaceDialog } from "@/components/workspace/CreateWorkspaceDialog";
 import { EditWorkspaceDialog } from "@/components/workspace/EditWorkspaceDialog";
@@ -66,8 +67,18 @@ export function AppShell() {
     }
   }
 
+  // El botón "widget" del PanelHeader emite este evento para abrir el editor de paneles
+  // sin necesidad de prop drilling desde PanelSlot → PanelHeader.
+  useEffect(() => {
+    const handler = () => openConfigurePanels();
+    window.addEventListener("stride:edit-panels", handler);
+    return () => window.removeEventListener("stride:edit-panels", handler);
+  });
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
+      <Titlebar />
+      <div className="flex flex-1 overflow-hidden">
       <Sidebar
         workspaces={workspaces}
         onAddWorkspace={() => setCreateOpen(true)}
@@ -87,6 +98,8 @@ export function AppShell() {
           </div>
         )}
       </main>
+
+      </div>
 
       <CreateWorkspaceDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <EditWorkspaceDialog

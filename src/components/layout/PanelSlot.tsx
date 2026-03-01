@@ -72,10 +72,9 @@ export function PanelSlot({ panel, layout, isLast, onDividerMouseDown }: Props) 
   return (
     <div
       className={cn(
-        "flex flex-col h-full w-full overflow-hidden",
-        "border-r border-border last:border-r-0"
+        "flex flex-col h-full w-full overflow-hidden"
       )}
-      style={{ position: "relative" }}
+      style={{ position: "relative", background: "var(--base)" }}
     >
       {panel.type === "WEB" ? (
         <>

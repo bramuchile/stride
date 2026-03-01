@@ -4,8 +4,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import type { Panel, PanelLayoutInfo } from "@/types";
 
-export const SIDEBAR_WIDTH = 56;
-export const HEADER_HEIGHT = 36;
+export const SIDEBAR_WIDTH = 52;
+export const TITLEBAR_HEIGHT = 30;
+export const PANEL_BAR_HEIGHT = 32;
+export const HEADER_HEIGHT = TITLEBAR_HEIGHT + PANEL_BAR_HEIGHT; // 62
 
 export function useWebviews(
   panels: Panel[],

@@ -292,48 +292,50 @@ pub async fn navigate_panel_webview<R: Runtime>(
 mod tests {
     use super::*;
 
+    // sidebar_width=52, header_height=62 (titlebar 30 + panel_bar 32)
+
     #[test]
     fn test_bounds_2col_left() {
-        let (pos, size) = calculate_bounds("2col", 0, 1400.0, 900.0, 56.0, 36.0, None, None, None);
-        assert_eq!(pos.x, 56.0);
-        assert_eq!(pos.y, 36.0);
-        assert!((size.width - 672.0).abs() < 0.01);
-        assert_eq!(size.height, 864.0);
+        let (pos, size) = calculate_bounds("2col", 0, 1400.0, 900.0, 52.0, 62.0, None, None, None);
+        assert_eq!(pos.x, 52.0);
+        assert_eq!(pos.y, 62.0);
+        assert!((size.width - 674.0).abs() < 0.01); // (1400-52)/2
+        assert_eq!(size.height, 838.0);              // 900-62
     }
 
     #[test]
     fn test_bounds_2col_right() {
-        let (pos, _) = calculate_bounds("2col", 1, 1400.0, 900.0, 56.0, 36.0, None, None, None);
-        assert!((pos.x - 728.0).abs() < 0.01);
-        assert_eq!(pos.y, 36.0);
+        let (pos, _) = calculate_bounds("2col", 1, 1400.0, 900.0, 52.0, 62.0, None, None, None);
+        assert!((pos.x - 726.0).abs() < 0.01); // 52 + 674
+        assert_eq!(pos.y, 62.0);
     }
 
     #[test]
     fn test_bounds_2x2_bottom_right() {
-        let (pos, size) = calculate_bounds("2x2", 3, 1400.0, 900.0, 56.0, 36.0, None, None, None);
-        assert!((pos.x - 728.0).abs() < 0.01);
-        assert!((pos.y - 468.0).abs() < 0.01);
-        assert!((size.width - 672.0).abs() < 0.01);
-        assert!((size.height - 432.0).abs() < 0.01);
+        let (pos, size) = calculate_bounds("2x2", 3, 1400.0, 900.0, 52.0, 62.0, None, None, None);
+        assert!((pos.x - 726.0).abs() < 0.01);  // 52 + 674
+        assert!((pos.y - 481.0).abs() < 0.01);  // 62 + 419
+        assert!((size.width - 674.0).abs() < 0.01);
+        assert!((size.height - 419.0).abs() < 0.01); // 838/2
     }
 
     #[test]
     fn test_bounds_top_overlay() {
         // Panel 3col pos=0 con overlay top 19% → webview arranca más abajo
-        let (pos, size) = calculate_bounds("3col", 0, 1400.0, 900.0, 56.0, 36.0, Some("top"), Some(19.0), None);
-        let available_height = 900.0 - 36.0; // 864
-        let overlay_px = available_height * 19.0 / 100.0; // 164.16
-        assert!((pos.y - (36.0 + overlay_px)).abs() < 0.1);
+        let (pos, size) = calculate_bounds("3col", 0, 1400.0, 900.0, 52.0, 62.0, Some("top"), Some(19.0), None);
+        let available_height = 900.0 - 62.0; // 838
+        let overlay_px = available_height * 19.0 / 100.0;
+        assert!((pos.y - (62.0 + overlay_px)).abs() < 0.1);
         assert!((size.height - (available_height - overlay_px)).abs() < 0.1);
     }
 
     #[test]
     fn test_bounds_bottom_overlay() {
         // Panel 3col pos=2 con overlay bottom 28% → webview es más corto
-        let (pos, size) = calculate_bounds("3col", 2, 1400.0, 900.0, 56.0, 36.0, Some("bottom"), Some(28.0), None);
-        let available_height = 900.0 - 36.0; // 864
-        let overlay_px = available_height * 28.0 / 100.0; // 241.92
-        assert_eq!(pos.y, 36.0); // y no cambia con overlay bottom
+        let (pos, size) = calculate_bounds("3col", 2, 1400.0, 900.0, 52.0, 62.0, Some("bottom"), Some(28.0), None);
+        let available_height = 900.0 - 62.0; // 838
+        let overlay_px = available_height * 28.0 / 100.0;
+        assert_eq!(pos.y, 62.0); // y no cambia con overlay bottom
         assert!((size.height - (available_height - overlay_px)).abs() < 0.1);
     }
 }
