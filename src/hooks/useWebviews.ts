@@ -4,8 +4,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import type { Panel, PanelLayoutInfo } from "@/types";
 
-const SIDEBAR_WIDTH = 52;
-const HEADER_HEIGHT = 36;
+export const SIDEBAR_WIDTH = 56;
+export const HEADER_HEIGHT = 36;
 
 export function useWebviews(
   panels: Panel[],
@@ -40,6 +40,8 @@ export function useWebviews(
             position: panel.position,
             sidebarWidth: SIDEBAR_WIDTH,
             headerHeight: HEADER_HEIGHT,
+            overlayPosition: panel.overlay_position ?? null,
+            overlayHeightPct: panel.overlay_height_pct ?? null,
           });
           registerWebview(panel.id, label);
         }
@@ -48,7 +50,12 @@ export function useWebviews(
       // Reposicionar los webviews existentes del workspace activo
       const toResize: PanelLayoutInfo[] = webPanels
         .filter((p) => webviewMap[p.id])
-        .map((p) => ({ panel_id: p.id, position: p.position }));
+        .map((p) => ({
+          panel_id: p.id,
+          position: p.position,
+          overlay_position: p.overlay_position ?? null,
+          overlay_height_pct: p.overlay_height_pct ?? null,
+        }));
 
       if (toResize.length > 0) {
         await invoke("resize_panel_webviews", {
@@ -77,6 +84,8 @@ export function useWebviews(
         const toResize: PanelLayoutInfo[] = webPanels.map((p) => ({
           panel_id: p.id,
           position: p.position,
+          overlay_position: p.overlay_position ?? null,
+          overlay_height_pct: p.overlay_height_pct ?? null,
         }));
 
         if (toResize.length > 0) {

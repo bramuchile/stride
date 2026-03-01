@@ -8,7 +8,7 @@ export function useWorkspaces() {
     queryFn: async () => {
       const db = await getDb();
       return db.select<Workspace[]>(
-        "SELECT id, name, layout, position FROM workspaces ORDER BY position ASC"
+        "SELECT id, name, layout, position, icon FROM workspaces ORDER BY position ASC"
       );
     },
   });
@@ -24,8 +24,22 @@ export function useCreateWorkspace() {
       );
       const nextPos = (rows[0]?.max_pos ?? -1) + 1;
       await db.execute(
-        "INSERT INTO workspaces (id, name, layout, position) VALUES ($1, $2, $3, $4)",
-        [ws.id, ws.name, ws.layout, nextPos]
+        "INSERT INTO workspaces (id, name, layout, position, icon) VALUES ($1, $2, $3, $4, $5)",
+        [ws.id, ws.name, ws.layout, nextPos, ws.icon ?? "📁"]
+      );
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["workspaces"] }),
+  });
+}
+
+export function useUpdateWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ws: Pick<Workspace, "id" | "name" | "icon">) => {
+      const db = await getDb();
+      await db.execute(
+        "UPDATE workspaces SET name=$1, icon=$2 WHERE id=$3",
+        [ws.name, ws.icon ?? "📁", ws.id]
       );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workspaces"] }),

@@ -39,4 +39,20 @@ async function runMigrations(db: Database): Promise<void> {
       value TEXT NOT NULL
     )
   `);
+
+  // Migraciones aditivas — seguras de re-ejecutar
+  const migrations = [
+    `ALTER TABLE workspaces ADD COLUMN icon TEXT NOT NULL DEFAULT '📁'`,
+    `ALTER TABLE panels ADD COLUMN overlay_widget_id TEXT`,
+    `ALTER TABLE panels ADD COLUMN overlay_position TEXT`,
+    `ALTER TABLE panels ADD COLUMN overlay_height_pct REAL`,
+  ];
+
+  for (const sql of migrations) {
+    try {
+      await db.execute(sql);
+    } catch {
+      // Columna ya existe — ignorar
+    }
+  }
 }

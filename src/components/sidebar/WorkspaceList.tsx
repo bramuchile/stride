@@ -5,9 +5,10 @@ interface Props {
   workspaces: Workspace[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onEdit: (ws: Workspace) => void;
 }
 
-export function WorkspaceList({ workspaces, activeId, onSelect }: Props) {
+export function WorkspaceList({ workspaces, activeId, onSelect, onEdit }: Props) {
   return (
     <div className="flex flex-col items-center gap-1 py-2">
       {workspaces.map((ws, i) => (
@@ -17,6 +18,7 @@ export function WorkspaceList({ workspaces, activeId, onSelect }: Props) {
           isActive={ws.id === activeId}
           shortcutIndex={i + 1}
           onSelect={() => onSelect(ws.id)}
+          onEdit={() => onEdit(ws)}
         />
       ))}
     </div>

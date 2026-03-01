@@ -5,8 +5,10 @@ use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBu
 
 pub struct WebviewRegistry(pub Mutex<HashMap<String, String>>);
 
-// Calcular bounds del webview según layout y posición del panel.
+// Calcular bounds del webview según layout, posición del panel y overlay widget opcional.
 // El webview empieza en y=header_height para dejar espacio al PanelHeader de React.
+// Si hay un overlay widget (top/bottom), se reduce el área del webview para que React
+// pueda renderizar el widget en el espacio libre.
 fn calculate_bounds(
     layout: &str,
     position: usize,
@@ -14,11 +16,13 @@ fn calculate_bounds(
     window_height: f64,
     sidebar_width: f64,
     header_height: f64,
+    overlay_position: Option<&str>,
+    overlay_height_pct: Option<f64>,
 ) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let available_width = window_width - sidebar_width;
     let available_height = window_height - header_height;
 
-    match layout {
+    let (mut pos, mut size) = match layout {
         "2col" => {
             let col_width = available_width / 2.0;
             let x = sidebar_width + (position as f64 * col_width);
@@ -52,7 +56,26 @@ fn calculate_bounds(
             LogicalPosition::new(sidebar_width, header_height),
             LogicalSize::new(available_width, available_height),
         ),
+    };
+
+    // Ajuste por overlay widget: recortar el área del webview para dejar espacio a React
+    if let (Some(ov_pos), Some(ov_pct)) = (overlay_position, overlay_height_pct) {
+        let row_count = if layout == "2x2" { 2.0 } else { 1.0 };
+        let panel_height = available_height / row_count;
+        let overlay_px = panel_height * ov_pct / 100.0;
+        match ov_pos {
+            "top" => {
+                pos.y += overlay_px;
+                size.height -= overlay_px;
+            }
+            "bottom" => {
+                size.height -= overlay_px;
+            }
+            _ => {}
+        }
     }
+
+    (pos, size)
 }
 
 #[tauri::command]
@@ -64,6 +87,8 @@ pub async fn create_panel_webview<R: Runtime>(
     position: usize,
     sidebar_width: f64,
     header_height: f64,
+    overlay_position: Option<String>,
+    overlay_height_pct: Option<f64>,
 ) -> Result<String, String> {
     // Window<R> (no WebviewWindow<R>) tiene el método add_child via feature unstable
     let window: Window<R> = app
@@ -82,6 +107,8 @@ pub async fn create_panel_webview<R: Runtime>(
         logical_height,
         sidebar_width,
         header_height,
+        overlay_position.as_deref(),
+        overlay_height_pct,
     );
 
     let webview_label = format!("panel-{}", panel_id);
@@ -137,6 +164,11 @@ pub async fn destroy_panel_webview<R: Runtime>(
 pub struct PanelLayoutInfo {
     pub panel_id: String,
     pub position: usize,
+    pub overlay_position: Option<String>,
+    pub overlay_height_pct: Option<f64>,
+    /// Fracciones personalizadas de ancho para paneles redimensionados manualmente (0.0–1.0)
+    pub custom_x_frac: Option<f64>,
+    pub custom_width_frac: Option<f64>,
 }
 
 #[tauri::command]
@@ -162,14 +194,23 @@ pub async fn resize_panel_webviews<R: Runtime>(
     for panel in panels {
         if let Some(label) = map.get(&panel.panel_id) {
             if let Some(webview) = app.get_webview(label) {
-                let (pos, size) = calculate_bounds(
+                let (mut pos, mut size) = calculate_bounds(
                     &layout,
                     panel.position,
                     logical_width,
                     logical_height,
                     sidebar_width,
                     header_height,
+                    panel.overlay_position.as_deref(),
+                    panel.overlay_height_pct,
                 );
+                // Si el usuario redimensionó el panel arrastrando el divisor,
+                // las fracciones personalizadas sobreescriben el ancho calculado por layout.
+                if let (Some(x_frac), Some(w_frac)) = (panel.custom_x_frac, panel.custom_width_frac) {
+                    let available_width = logical_width - sidebar_width;
+                    pos.x = sidebar_width + x_frac * available_width;
+                    size.width = w_frac * available_width;
+                }
                 webview
                     .set_bounds(tauri::Rect {
                         position: pos.into(),
@@ -238,26 +279,46 @@ mod tests {
 
     #[test]
     fn test_bounds_2col_left() {
-        let (pos, size) = calculate_bounds("2col", 0, 1400.0, 900.0, 52.0, 36.0);
-        assert_eq!(pos.x, 52.0);
+        let (pos, size) = calculate_bounds("2col", 0, 1400.0, 900.0, 56.0, 36.0, None, None);
+        assert_eq!(pos.x, 56.0);
         assert_eq!(pos.y, 36.0);
-        assert!((size.width - 674.0).abs() < 0.01);
+        assert!((size.width - 672.0).abs() < 0.01);
         assert_eq!(size.height, 864.0);
     }
 
     #[test]
     fn test_bounds_2col_right() {
-        let (pos, _) = calculate_bounds("2col", 1, 1400.0, 900.0, 52.0, 36.0);
-        assert!((pos.x - 726.0).abs() < 0.01);
+        let (pos, _) = calculate_bounds("2col", 1, 1400.0, 900.0, 56.0, 36.0, None, None);
+        assert!((pos.x - 728.0).abs() < 0.01);
         assert_eq!(pos.y, 36.0);
     }
 
     #[test]
     fn test_bounds_2x2_bottom_right() {
-        let (pos, size) = calculate_bounds("2x2", 3, 1400.0, 900.0, 52.0, 36.0);
-        assert!((pos.x - 726.0).abs() < 0.01);
+        let (pos, size) = calculate_bounds("2x2", 3, 1400.0, 900.0, 56.0, 36.0, None, None);
+        assert!((pos.x - 728.0).abs() < 0.01);
         assert!((pos.y - 468.0).abs() < 0.01);
-        assert!((size.width - 674.0).abs() < 0.01);
+        assert!((size.width - 672.0).abs() < 0.01);
         assert!((size.height - 432.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_bounds_top_overlay() {
+        // Panel 3col pos=0 con overlay top 19% → webview arranca más abajo
+        let (pos, size) = calculate_bounds("3col", 0, 1400.0, 900.0, 56.0, 36.0, Some("top"), Some(19.0));
+        let available_height = 900.0 - 36.0; // 864
+        let overlay_px = available_height * 19.0 / 100.0; // 164.16
+        assert!((pos.y - (36.0 + overlay_px)).abs() < 0.1);
+        assert!((size.height - (available_height - overlay_px)).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_bounds_bottom_overlay() {
+        // Panel 3col pos=2 con overlay bottom 28% → webview es más corto
+        let (pos, size) = calculate_bounds("3col", 2, 1400.0, 900.0, 56.0, 36.0, Some("bottom"), Some(28.0));
+        let available_height = 900.0 - 36.0; // 864
+        let overlay_px = available_height * 28.0 / 100.0; // 241.92
+        assert_eq!(pos.y, 36.0); // y no cambia con overlay bottom
+        assert!((size.height - (available_height - overlay_px)).abs() < 0.1);
     }
 }
