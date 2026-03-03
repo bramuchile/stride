@@ -142,10 +142,19 @@ pub async fn create_panel_webview<R: Runtime>(
 
     let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
 
+    // Detectar si este panel apunta a WhatsApp Web para inyectar el script de toggle de sidebar.
+    let is_whatsapp = parsed_url.host_str() == Some("web.whatsapp.com");
+
     let panel_id_for_nav = panel_id.clone();
     let app_for_popup = app.clone();
+    let whatsapp_toggle_script = if is_whatsapp {
+        Some(include_str!("./whatsapp_sidebar_toggle.js"))
+    } else {
+        None
+    };
 
-    let webview_builder = WebviewBuilder::new(&webview_label, WebviewUrl::External(parsed_url))
+    // Builder base — igual para todos los paneles
+    let mut webview_builder = WebviewBuilder::new(&webview_label, WebviewUrl::External(parsed_url))
         .data_directory(data_dir)
         // FIX 1: UA estándar de Chrome — evita bloqueos en WhatsApp Web, Google Meet, etc.
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -162,6 +171,17 @@ pub async fn create_panel_webview<R: Runtime>(
         .on_page_load(move |webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 let url_str = payload.url().to_string();
+                // WhatsApp usa navegacion SPA y re-renderiza partes del DOM.
+                // Re-ejecutamos el script defensivamente en cada carga terminada.
+                if let Some(script) = whatsapp_toggle_script {
+                    let is_wa_page = url::Url::parse(&url_str)
+                        .ok()
+                        .and_then(|u| u.host_str().map(|h| h == "web.whatsapp.com"))
+                        .unwrap_or(false);
+                    if is_wa_page {
+                        let _ = webview.eval(script);
+                    }
+                }
                 if !url_str.starts_with("about:")
                     && !url_str.starts_with("data:")
                     && !url_str.starts_with("chrome-extension://")
@@ -175,6 +195,18 @@ pub async fn create_panel_webview<R: Runtime>(
             }
         })
         .auto_resize();
+
+    // Para paneles de WhatsApp Web: inyectar botón flotante para toggle de sidebar.
+    // initialization_script se registra a nivel WebView2 y se ejecuta automáticamente
+    // en cada carga de página, incluidas las navegaciones SPA internas de WhatsApp.
+    //
+    // Si WhatsApp cambia sus selectores DOM, editar:
+    //   src-tauri/src/commands/whatsapp_sidebar_toggle.js
+    // y recompilar (include_str! embebe el JS en el binario en compile-time).
+    if is_whatsapp {
+        webview_builder = webview_builder
+            .initialization_script(include_str!("./whatsapp_sidebar_toggle.js"));
+    }
 
     window
         .add_child(webview_builder, pos, size)
