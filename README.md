@@ -1,86 +1,110 @@
 # Stride
 
-Centro de control multipanel para productividad diaria. Abre Gmail, Calendar, GitHub y tus apps favoritas en una sola ventana, sin pestañas, sin distracciones.
+**A multi-panel desktop workspace for focused work.**
+Open Gmail, Calendar, GitHub, and your daily apps side-by-side — no tabs, no browser clutter.
 
-> **Estado:** Fase 1 (MVP) completa — Windows únicamente.
+![Stride Screenshot](./docs/screenshot.png)
 
----
+[![Version](https://img.shields.io/badge/version-0.1.0-7C6AF7?style=flat-square)](https://github.com/your-org/stride/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows)](https://github.com/your-org/stride/releases)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
+[![Built with Tauri](https://img.shields.io/badge/built_with-Tauri_2-FFC131?style=flat-square&logo=tauri)](https://tauri.app)
+[![Built with React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 
-## ¿Qué es Stride?
-
-Stride te permite organizar tus aplicaciones web en **Workspaces** con layouts configurables (2 columnas, 3 columnas, cuadrícula 2×2). Cada panel muestra un WebView real con sesión compartida: **inicia sesión en Google una sola vez** y todos los paneles (Gmail, Calendar, Drive…) la usan automáticamente.
-
-### Workspaces incluidos
-
-| Workspace | Layout | Paneles |
-|-----------|--------|---------|
-| Trabajo   | 2 col  | Gmail · Google Calendar |
-| Personal  | 2 col  | YouTube · Scratchpad |
-| Dev       | 3 col  | GitHub · localhost:3000 · Vercel |
+> **Status:** Phase 1 (MVP) complete — Windows only.
 
 ---
 
-## Características
+## What is Stride?
 
-- **Multipanel real** — WebView2 nativo, no iframes
-- **Sesión unificada** — cookies y localStorage compartidos entre todos los paneles
-- **Barra de direcciones por panel** — haz clic en el dominio o en la lupa para navegar
-- **Sidebar slim** — 52 px con iniciales de workspace y tooltips
-- **Scratchpad** — bloc de notas persistente entre sesiones
-- **Atajos de teclado** — `Ctrl+1`/`2`/`3` para cambiar workspace, `Ctrl+Tab` para ciclar
-- **Carga diferida** — los WebViews se crean una vez y se muestran/ocultan al cambiar workspace
-- **Auto-update** — actualizaciones automáticas vía Tauri updater
-- **Reporte de errores** — botón "Copiar error" formateado listo para pegar en GitHub Issues
+Stride is a desktop shell that organizes web apps into configurable **Workspaces** with real, native WebView2 panels — not iframes, not browser tabs.
+
+Each panel runs a full WebView2 instance with a **shared session**: sign in to Google once and every panel (Gmail, Calendar, Drive, Meet) picks it up automatically.
+
+Panels can also host **integrated widgets** — lightweight tools like a scratchpad that dock inside the panel area without floating over content.
 
 ---
 
-## Stack
+## Features
 
-| Capa | Tecnología |
-|------|------------|
-| Desktop | Tauri 2 + Rust |
-| WebView | WebView2 (Windows) |
+- **Native multi-panel layout** — 2-column, 3-column, and 2×2 grid layouts
+- **Shared session** — cookies and localStorage shared across all panels via a single WebView2 profile
+- **Per-panel address bar** — click to navigate or search within any panel
+- **Integrated widgets** — widgets reduce the webview area and live structurally inside the panel
+- **Scratchpad widget** — persistent notes, per panel, across sessions
+- **Slim sidebar** — 52px, workspace switching with keyboard shortcuts
+- **Deferred loading** — WebViews are created once and shown/hidden on workspace switch (never recreated)
+- **Auto-update** — built-in updater via Tauri updater plugin
+- **Error reporting** — "Copy error" button formats diagnostics for GitHub Issues
+
+---
+
+## Included Workspaces
+
+| Workspace | Layout | Panels |
+|-----------|--------|--------|
+| Work      | 2-col  | Gmail · Google Calendar |
+| Personal  | 2-col  | YouTube · Scratchpad |
+| Dev       | 3-col  | GitHub · localhost:3000 · Vercel |
+
+These are seeds for first launch — workspaces are fully configurable.
+
+---
+
+## Download
+
+Pre-built installers are available on the [Releases page](https://github.com/your-org/stride/releases).
+
+| Installer | Format |
+|-----------|--------|
+| `Stride_0.1.0_x64-setup.exe` | NSIS installer |
+| `Stride_0.1.0_x64.msi` | MSI package |
+
+**Requirements:** Windows 10/11 (x64). [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is bundled with the installer.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Desktop shell | Tauri 2 + Rust |
+| WebView engine | WebView2 (Windows) |
 | Frontend | React 19 + TypeScript + Vite |
-| UI | shadcn/ui + Tailwind CSS v4 |
-| Estado | Zustand |
-| Datos | TanStack Query + SQLite (tauri-plugin-sql) |
+| UI components | shadcn/ui + Tailwind CSS v4 |
+| State | Zustand |
+| Data | TanStack Query + SQLite (tauri-plugin-sql) |
 
 ---
 
-## Requisitos previos
+## Building from Source
+
+### Prerequisites
 
 - [Node.js](https://nodejs.org/) ≥ 20
-- [Rust](https://rustup.rs/) (stable)
-- [Tauri prerequisites para Windows](https://v2.tauri.app/start/prerequisites/) — Microsoft C++ Build Tools + WebView2
+- [Rust](https://rustup.rs/) (stable toolchain)
+- [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) — Microsoft C++ Build Tools + WebView2 runtime
 
----
-
-## Desarrollo
+### Development
 
 ```bash
-# Instalar dependencias JS
 npm install
-
-# Arrancar en modo desarrollo (abre la ventana Tauri con hot-reload)
 npm run tauri dev
 ```
 
-La primera vez que arranques se ejecuta la migración SQLite y el seeding de los 3 workspaces de ejemplo. La base de datos se guarda en `%APPDATA%\stride\stride.db`.
+On first run, SQLite migrations execute and the default workspaces are seeded. The database is stored at `%APPDATA%\stride\stride.db`.
 
----
-
-## Build
+### Production Build
 
 ```bash
-# Generar instalador (.msi y .nsis)
 npm run tauri build
 ```
 
-El instalador queda en `src-tauri/target/release/bundle/`.
+Installer artifacts are output to `src-tauri/target/release/bundle/`.
 
 ---
 
-## Estructura del proyecto
+## Project Structure
 
 ```
 stride/
@@ -89,61 +113,62 @@ stride/
 │   ├── types/index.ts                   # Workspace, Panel, LayoutType
 │   ├── store/useWorkspaceStore.ts       # Zustand: activeWorkspaceId + webviewMap
 │   ├── lib/
-│   │   ├── db.ts                        # Singleton SQLite + migraciones
-│   │   └── seed.ts                      # Seeding en primer arranque
+│   │   ├── db.ts                        # SQLite singleton + migrations
+│   │   └── seed.ts                      # First-launch seeding
 │   ├── hooks/
-│   │   ├── useWorkspaces.ts             # CRUD workspaces (TanStack Query)
-│   │   ├── usePanels.ts                 # Panels por workspace
-│   │   ├── useWebviews.ts               # Ciclo de vida WebView2 (create/show/hide/resize)
+│   │   ├── useWorkspaces.ts             # Workspace CRUD (TanStack Query)
+│   │   ├── usePanels.ts                 # Panels per workspace
+│   │   ├── useWebviews.ts               # WebView2 lifecycle (create/show/hide/resize)
 │   │   └── useKeyboardShortcuts.ts      # Ctrl+1..9, Ctrl+Tab
 │   └── components/
 │       ├── layout/                      # AppShell, PanelGrid, PanelSlot
-│       ├── sidebar/                     # Sidebar slim, WorkspaceList, WorkspaceItem
+│       ├── sidebar/                     # Sidebar, WorkspaceList, WorkspaceItem
 │       ├── panels/                      # WebPanel, WidgetPanel, PanelHeader, AddressBar
-│       ├── widgets/scratchpad/          # ScratchpadWidget + useScratchpad
+│       ├── widgets/                     # Scratchpad, Notes, and future widgets
 │       └── error/                       # ErrorBoundary + ErrorDisplay
 └── src-tauri/
     └── src/
-        ├── lib.rs                       # Plugins + registro de comandos
-        └── commands/webview.rs          # create/destroy/resize/show/hide/navigate WebViews
+        ├── lib.rs                       # Plugin registration + command setup
+        └── commands/webview.rs          # create/resize/show/hide/navigate WebViews
 ```
 
 ---
 
-## Atajos de teclado
+## Keyboard Shortcuts
 
-| Atajo | Acción |
-|-------|--------|
-| `Ctrl+1` … `Ctrl+9` | Cambiar al workspace N |
-| `Ctrl+Tab` | Workspace siguiente |
-| `Ctrl+Shift+Tab` | Workspace anterior |
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+1` … `Ctrl+9` | Switch to workspace N |
+| `Ctrl+Tab` | Next workspace |
+| `Ctrl+Shift+Tab` | Previous workspace |
 
 ---
 
 ## Roadmap
 
-### Fase 2 (próxima)
-- Editor visual de Workspaces (arrastrar paneles, cambiar URLs)
-- Layouts custom
-- Perfiles múltiples (Trabajo / Personal)
-- Calendar Widget con Google Calendar API
-- Exportar / importar Workspaces en JSON
-- Más widgets: Focus Timer, Daily Briefing, Habit Tracker
+### Phase 2 — In Progress
+- Visual workspace editor (drag panels, change URLs, reorder)
+- Custom layouts
+- Calendar widget (Google Calendar API)
+- Notes widget redesign
+- Export / import workspaces as JSON
 
-### Fase 3
-- Modo Focus (filtro de distracciones basado en EasyList)
-- Asset Price Widget
-- Service Status Widget
-- Sync en la nube (Plan Pro)
-
----
-
-## Contribuir
-
-El proyecto es open source. Si encuentras un bug, usa el botón **"Copiar error"** que aparece en la pantalla de error y pega el contenido en un [nuevo issue](../../issues).
+### Phase 3
+- Focus mode (distraction filter based on EasyList)
+- Additional widgets: Focus Timer, Daily Briefing, Asset Price, Service Status
+- Cloud sync (Pro plan)
+- macOS + Linux support
 
 ---
 
-## Licencia
+## Contributing
 
-MIT
+Stride is open source. If you find a bug, use the **"Copy error"** button on the error screen and paste the output into a [new issue](../../issues).
+
+Pull requests are welcome. For significant changes, open an issue first to discuss the approach.
+
+---
+
+## License
+
+[MIT](./LICENSE)
