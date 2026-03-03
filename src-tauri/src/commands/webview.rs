@@ -1,9 +1,17 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBuilder, WebviewUrl, Window};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBuilder, WebviewUrl, Window};
+use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri_plugin_opener::OpenerExt;
 
 pub struct WebviewRegistry(pub Mutex<HashMap<String, String>>);
+
+#[derive(Clone, Serialize)]
+struct PanelNavigatedPayload {
+    panel_id: String,
+    url: String,
+}
 
 // Calcular bounds del webview según layout, posición del panel y overlay widget opcional.
 // El webview empieza en y=header_height para dejar espacio al PanelHeader de React.
@@ -134,8 +142,38 @@ pub async fn create_panel_webview<R: Runtime>(
 
     let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
 
+    let panel_id_for_nav = panel_id.clone();
+    let app_for_popup = app.clone();
+
     let webview_builder = WebviewBuilder::new(&webview_label, WebviewUrl::External(parsed_url))
         .data_directory(data_dir)
+        // FIX 1: UA estándar de Chrome — evita bloqueos en WhatsApp Web, Google Meet, etc.
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        // FIX 2: Habilitar acceso al clipboard
+        .enable_clipboard_access()
+        // FIX 3: Deshabilitar zoom con Ctrl+Scroll en paneles web
+        .zoom_hotkeys_enabled(false)
+        // FIX 5: Abrir target=_blank y popups en el navegador del sistema en lugar de perderlos
+        .on_new_window(move |url, _features| {
+            let _ = app_for_popup.opener().open_url(url.as_str(), None::<&str>);
+            NewWindowResponse::Deny
+        })
+        // FIX 6: Emitir evento al frontend cuando el usuario navega dentro del panel
+        .on_page_load(move |webview, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                let url_str = payload.url().to_string();
+                if !url_str.starts_with("about:")
+                    && !url_str.starts_with("data:")
+                    && !url_str.starts_with("chrome-extension://")
+                    && !url_str.is_empty()
+                {
+                    let _ = webview.emit("panel-navigated", PanelNavigatedPayload {
+                        panel_id: panel_id_for_nav.clone(),
+                        url: url_str,
+                    });
+                }
+            }
+        })
         .auto_resize();
 
     window

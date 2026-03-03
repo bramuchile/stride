@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
+import { getDb } from "@/lib/db";
 import type { Panel, PanelLayoutInfo } from "@/types";
+
+const delay = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
 export const SIDEBAR_WIDTH = 52;
 export const TITLEBAR_HEIGHT = 30;
@@ -39,8 +43,10 @@ export function useWebviews(
         }
       }
 
-      // Crear los nuevos (ya quedan posicionados correctamente desde create_panel_webview)
-      for (const panel of newPanels) {
+      // Crear los nuevos (ya quedan posicionados correctamente desde create_panel_webview).
+      // Delay de 150ms entre creaciones para mitigar pantalla blanca en Tauri 2 multiwebview.
+      for (let i = 0; i < newPanels.length; i++) {
+        const panel = newPanels[i];
         const label = await invoke<string>("create_panel_webview", {
           panelId: panel.id,
           url: panel.url!,
@@ -53,6 +59,9 @@ export function useWebviews(
         });
         registerWebview(panel.id, label);
         setWebviewUrl(panel.id, panel.url!);
+        if (i < newPanels.length - 1) {
+          await delay(150);
+        }
       }
 
       // Reubicar los existentes a sus bounds correctos ANTES de mostrarlos
@@ -119,6 +128,22 @@ export function useWebviews(
       unlisten?.();
     };
   }, [panels, layout, webviewMap]);
+
+  // FIX 6: Persistir URL cuando el usuario navega dentro de un panel WEB
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    listen<{ panel_id: string; url: string }>("panel-navigated", async (event) => {
+      const { panel_id, url } = event.payload;
+      setWebviewUrl(panel_id, url);
+      try {
+        const db = await getDb();
+        await db.execute("UPDATE panels SET url = $1 WHERE id = $2", [url, panel_id]);
+      } catch (err) {
+        console.error("Failed to persist panel URL:", err);
+      }
+    }).then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, []); // Sin dependencias: listener global para toda la sesión
 
   const destroyAll = useCallback(async () => {
     const { webviewMap: map, unregisterWebview } = useWorkspaceStore.getState();

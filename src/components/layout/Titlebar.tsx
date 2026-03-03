@@ -1,6 +1,7 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import { getPendingUpdate } from "@/features/updater/useUpdater";
 import { useState, useEffect } from "react";
 
 const win = getCurrentWindow();
@@ -10,6 +11,8 @@ export function Titlebar() {
   const { data: workspaces = [] } = useWorkspaces();
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     win.isMaximized().then(setIsMaximized);
@@ -18,6 +21,23 @@ export function Titlebar() {
     });
     return () => { unlisten.then(fn => fn()); };
   }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { version } = (e as CustomEvent<{ version: string }>).detail;
+      setUpdateVersion(version);
+    };
+    window.addEventListener("stride:update-available", handler);
+    return () => window.removeEventListener("stride:update-available", handler);
+  }, []);
+
+  const handleInstall = async () => {
+    const update = getPendingUpdate();
+    if (!update) return;
+    setInstalling(true);
+    try { await update.downloadAndInstall(); }
+    catch { setInstalling(false); }
+  };
 
   return (
     <div
@@ -79,6 +99,34 @@ export function Titlebar() {
 
       {/* SPACER: ocupa todo el ancho disponible y actúa como drag region */}
       <div style={{ flex: 1 }} data-tauri-drag-region />
+
+      {/* UPDATE BANNER: visible cuando hay una nueva versión disponible */}
+      {updateVersion && (
+        <div style={{
+          position: "absolute", right: 46 * 3 + 8, top: "50%",
+          transform: "translateY(-50%)",
+          display: "flex", alignItems: "center", gap: 6,
+          background: "rgba(124,106,247,0.12)",
+          border: "1px solid rgba(124,106,247,0.35)",
+          borderRadius: 4, padding: "2px 8px",
+          pointerEvents: "auto", zIndex: 20,
+        }}>
+          <span style={{
+            fontFamily: "'Geist Mono', monospace", fontSize: 9,
+            color: "var(--accent)", letterSpacing: "0.04em", whiteSpace: "nowrap",
+          }}>
+            v{updateVersion} disponible
+          </span>
+          <button onClick={handleInstall} disabled={installing} style={{
+            background: "var(--accent)", border: "none", borderRadius: 3,
+            padding: "1px 7px", cursor: installing ? "default" : "pointer",
+            fontFamily: "'Geist Mono', monospace", fontSize: 9, color: "#fff",
+            opacity: installing ? 0.6 : 1, fontWeight: 600, letterSpacing: "0.04em",
+          }}>
+            {installing ? "..." : "Instalar"}
+          </button>
+        </div>
+      )}
 
       {/* RIGHT: Controles de ventana estilo Windows */}
       <div style={{ display: "flex", height: "100%", flexShrink: 0 }}>
