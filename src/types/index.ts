@@ -1,6 +1,6 @@
 export type LayoutType = "2col" | "3col" | "2x2";
 export type PanelType = "WEB" | "WIDGET";
-export type WidgetId = "scratchpad" | "next-meeting";
+export type WidgetId = "scratchpad" | "next-meeting" | "notes";
 
 export interface Workspace {
   id: string;

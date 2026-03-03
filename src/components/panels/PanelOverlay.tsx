@@ -1,8 +1,10 @@
 import { ScratchpadWidget } from "@/components/widgets/scratchpad/ScratchpadWidget";
 import { NextMeetingWidget } from "@/components/widgets/next-meeting/NextMeetingWidget";
-import type { WidgetId } from "@/types";
+import { NotesWidget } from "@/components/widgets/notes/NotesWidget";
+import type { Panel, WidgetId } from "@/types";
 
 interface Props {
+  panel: Panel;
   widgetId: WidgetId;
   position: "top" | "bottom";
   onCollapse: () => void;
@@ -11,10 +13,24 @@ interface Props {
 const WIDGET_META: Record<WidgetId, { label: string; dotColor: string; lineColor: string }> = {
   "next-meeting": { label: "próxima reunión", dotColor: "var(--accent)", lineColor: "var(--accent)" },
   "scratchpad":   { label: "notas rápidas",   dotColor: "var(--amber)",  lineColor: "var(--amber)" },
+  "notes":        { label: "notas rápidas",   dotColor: "var(--amber)",  lineColor: "var(--amber)" },
 };
 
-export function PanelOverlay({ widgetId, position, onCollapse }: Props) {
+export function PanelOverlay({ panel, widgetId, position, onCollapse }: Props) {
   const meta = WIDGET_META[widgetId] ?? { label: widgetId, dotColor: "var(--text3)", lineColor: "var(--text3)" };
+
+  // El NotesWidget gestiona su propio header completo (incluyendo el botón colapsar)
+  if (widgetId === "notes") {
+    return (
+      <NotesWidget
+        panelId={panel.id}
+        panelUrl={panel.url}
+        position={position}
+        onCollapse={onCollapse}
+      />
+    );
+  }
+
   const collapseIcon = position === "top" ? "▲" : "▼";
 
   return (

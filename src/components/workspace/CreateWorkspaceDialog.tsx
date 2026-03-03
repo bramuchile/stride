@@ -18,7 +18,7 @@ const LAYOUT_OPTIONS: { value: LayoutType; label: string; icon: string; slots: n
 const WIDGET_OPTIONS: { value: WidgetId | ""; label: string }[] = [
   { value: "",              label: "Sin widget" },
   { value: "next-meeting",  label: "Próxima reunión" },
-  { value: "scratchpad",    label: "Notas rápidas" },
+  { value: "notes",    label: "Notas rápidas" },
 ];
 
 interface SlotConfig {

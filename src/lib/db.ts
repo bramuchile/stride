@@ -40,6 +40,27 @@ async function runMigrations(db: Database): Promise<void> {
     )
   `);
 
+  // Tabla de notas por panel
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS notes (
+      panel_id       TEXT PRIMARY KEY,
+      content        TEXT NOT NULL DEFAULT '',
+      pinned_content TEXT NOT NULL DEFAULT '',
+      updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
+  // Historial de versiones por panel (máx 10 por panel_id)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS notes_history (
+      id       TEXT PRIMARY KEY,
+      panel_id TEXT NOT NULL,
+      content  TEXT NOT NULL,
+      saved_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // Migraciones aditivas — seguras de re-ejecutar
   const migrations = [
     `ALTER TABLE workspaces ADD COLUMN icon TEXT NOT NULL DEFAULT '📁'`,

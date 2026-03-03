@@ -5,6 +5,7 @@ import { Titlebar } from "./Titlebar";
 import { PanelGrid } from "./PanelGrid";
 import { CreateWorkspaceDialog } from "@/components/workspace/CreateWorkspaceDialog";
 import { EditWorkspaceDialog } from "@/components/workspace/EditWorkspaceDialog";
+import { SettingsDrawer } from "@/components/settings/SettingsDrawer";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { usePanels } from "@/hooks/usePanels";
@@ -21,6 +22,7 @@ export function AppShell() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
   const [editStartAtPanels, setEditStartAtPanels] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Cuando cualquier diálogo está abierto, ocultar los WebViews nativos para que
   // no queden por encima del diálogo (los WebView2 child windows siempre están
@@ -30,7 +32,7 @@ export function AppShell() {
   const panelsRef = useRef(panels);
   panelsRef.current = panels;
 
-  const anyDialogOpen = editingWorkspace !== null || createOpen;
+  const anyDialogOpen = editingWorkspace !== null || createOpen || settingsOpen;
   useEffect(() => {
     if (anyDialogOpen) {
       invoke("hide_all_panel_webviews").catch(console.error);
@@ -83,6 +85,7 @@ export function AppShell() {
         workspaces={workspaces}
         onAddWorkspace={() => setCreateOpen(true)}
         onEditWorkspace={openEditWorkspace}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="flex-1 overflow-hidden">
         {activeWorkspace && panels.length > 0 && (
@@ -100,6 +103,7 @@ export function AppShell() {
 
       </div>
 
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <CreateWorkspaceDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <EditWorkspaceDialog
         workspace={editingWorkspace}

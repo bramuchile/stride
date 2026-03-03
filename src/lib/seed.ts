@@ -10,7 +10,11 @@ export async function seedIfNeeded(): Promise<void> {
     "SELECT value FROM settings WHERE key = 'seed_v2'"
   );
 
-  if (rows.length > 0) return;
+  if (rows.length > 0) {
+    // Ejecutar migraciones incrementales aunque el seed base ya exista
+    await migrateV3();
+    return;
+  }
 
   const workspaces: Workspace[] = [
     { id: "ws-trabajo",  name: "Trabajo",  layout: "3col", position: 0, icon: "💼" },
@@ -51,7 +55,7 @@ export async function seedIfNeeded(): Promise<void> {
       type: "WEB",
       url: "https://youtube.com",
       position: 2,
-      overlay_widget_id: "scratchpad",
+      overlay_widget_id: "notes",
       overlay_position: "bottom",
       overlay_height_pct: 28,
     },
@@ -145,5 +149,24 @@ export async function seedIfNeeded(): Promise<void> {
   // Marcar también el flag antiguo para no re-correr el seed v1
   await db.execute(
     "INSERT OR REPLACE INTO settings (key, value) VALUES ('onboarding_seeded', 'true')"
+  );
+
+  // seed_v3 ya se ejecutará a continuación
+}
+
+// Migración v3: reemplaza "scratchpad" overlay por "notes" en todos los paneles que lo usen
+async function migrateV3(): Promise<void> {
+  const db = await getDb();
+  const rows = await db.select<{ value: string }[]>(
+    "SELECT value FROM settings WHERE key = 'seed_v3'"
+  );
+  if (rows.length > 0) return;
+
+  await db.execute(
+    "UPDATE panels SET overlay_widget_id = 'notes' WHERE overlay_widget_id = 'scratchpad'"
+  );
+
+  await db.execute(
+    "INSERT OR REPLACE INTO settings (key, value) VALUES ('seed_v3', 'true')"
   );
 }

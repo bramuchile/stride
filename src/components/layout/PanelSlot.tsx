@@ -88,6 +88,7 @@ export function PanelSlot({ panel, layout }: Props) {
             ) : (
               <div style={{ height: `${panel.overlay_height_pct}%`, flexShrink: 0 }}>
                 <PanelOverlay
+                  panel={panel}
                   widgetId={panel.overlay_widget_id!}
                   position="top"
                   onCollapse={handleCollapse}
@@ -110,6 +111,7 @@ export function PanelSlot({ panel, layout }: Props) {
             ) : (
               <div style={{ height: `${panel.overlay_height_pct}%`, flexShrink: 0 }}>
                 <PanelOverlay
+                  panel={panel}
                   widgetId={panel.overlay_widget_id!}
                   position="bottom"
                   onCollapse={handleCollapse}

@@ -23,6 +23,12 @@
   --text:        #EDE9FE;
   --text2:       #9D8FC2;
   --text3:       #6B5F8A;
+  --text4:       #3D3558;
+
+  --elevated2:   #2C293E;
+  --amber-dim:   rgba(251,146,60,0.08);
+  --amber-glow:  rgba(251,146,60,0.2);
+  --green-dim:   rgba(74,222,128,0.08);
 }
 
 /* ── TAILWIND v4: alias tokens → nombres Tailwind ── */

@@ -13,9 +13,10 @@ interface Props {
   workspaces: Workspace[];
   onAddWorkspace: () => void;
   onEditWorkspace: (ws: Workspace) => void;
+  onOpenSettings: () => void;
 }
 
-export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) {
+export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace, onOpenSettings }: Props) {
   const { activeWorkspaceId, setActiveWorkspace } = useWorkspaceStore();
 
   return (
@@ -133,6 +134,7 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace }: Props) 
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                onClick={onOpenSettings}
                 className="flex items-center justify-center rounded-lg transition-all"
                 style={{
                   width: "32px", height: "32px",
