@@ -3,7 +3,6 @@
 **A multi-panel desktop workspace for focused work.**
 Open Gmail, Calendar, GitHub, and your daily apps side-by-side — no tabs, no browser clutter.
 
-![Stride Screenshot](./docs/screenshot.png)
 
 [![Version](https://img.shields.io/badge/version-0.1.0-7C6AF7?style=flat-square)](https://github.com/your-org/stride/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows)](https://github.com/your-org/stride/releases)
