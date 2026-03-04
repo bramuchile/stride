@@ -4,8 +4,8 @@
 Open Gmail, Calendar, GitHub, and your daily apps side-by-side — no tabs, no browser clutter.
 
 
-[![Version](https://img.shields.io/badge/version-0.1.0-7C6AF7?style=flat-square)](https://github.com/your-org/stride/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows)](https://github.com/your-org/stride/releases)
+[![Version](https://img.shields.io/badge/version-0.1.3-7C6AF7?style=flat-square)](https://github.com/bramuchile/stride/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows)](https://github.com/bramuchile/stride/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/built_with-Tauri_2-FFC131?style=flat-square&logo=tauri)](https://tauri.app)
 [![Built with React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
