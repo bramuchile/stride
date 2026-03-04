@@ -8,6 +8,28 @@ import type { Panel, PanelLayoutInfo } from "@/types";
 
 const delay = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
+/**
+ * Calcula custom_x_frac / custom_width_frac para cada panel a partir de
+ * sus width_frac guardados en DB. Devuelve un mapa panelId → {x, w}.
+ * Si ningún panel tiene width_frac, devuelve mapa vacío (se usará el layout por defecto).
+ */
+function buildFracMap(
+  webPanels: Panel[],
+  layout: string
+): Record<string, { x_frac: number; w_frac: number }> {
+  if (layout === "2x2" || !webPanels.some((p) => p.width_frac != null)) return {};
+  const fracs = webPanels.map((p) => p.width_frac ?? 1 / webPanels.length);
+  const total = fracs.reduce((s, f) => s + f, 0);
+  const norm = fracs.map((f) => f / total);
+  const map: Record<string, { x_frac: number; w_frac: number }> = {};
+  let cumX = 0;
+  webPanels.forEach((p, i) => {
+    map[p.id] = { x_frac: cumX, w_frac: norm[i] };
+    cumX += norm[i];
+  });
+  return map;
+}
+
 export const SIDEBAR_WIDTH = 52;
 export const TITLEBAR_HEIGHT = 30;
 export const PANEL_BAR_HEIGHT = 32;
@@ -64,13 +86,17 @@ export function useWebviews(
         }
       }
 
-      // Reubicar los existentes a sus bounds correctos ANTES de mostrarlos
-      // (evita el flash de posición incorrecta al cambiar de workspace)
-      const toResize: PanelLayoutInfo[] = existingPanels.map((p) => ({
+      // Reubicar TODOS los webviews (nuevos y existentes) a sus bounds correctos.
+      // Los nuevos se crean con el layout por defecto; si tienen width_frac guardada
+      // en DB necesitan un resize explícito para tomar el tamaño correcto desde el inicio.
+      const fracMap = buildFracMap(webPanels, layout);
+      const toResize: PanelLayoutInfo[] = webPanels.map((p) => ({
         panel_id: p.id,
         position: p.position,
         overlay_position: p.overlay_position ?? null,
         overlay_height_pct: p.overlay_height_pct ?? null,
+        custom_x_frac: fracMap[p.id]?.x_frac ?? null,
+        custom_width_frac: fracMap[p.id]?.w_frac ?? null,
       }));
 
       if (toResize.length > 0) {
@@ -104,11 +130,14 @@ export function useWebviews(
     win
       .onResized(() => {
         const webPanels = panels.filter((p) => p.type === "WEB" && webviewMap[p.id]);
+        const fracMap = buildFracMap(webPanels, layout);
         const toResize: PanelLayoutInfo[] = webPanels.map((p) => ({
           panel_id: p.id,
           position: p.position,
           overlay_position: p.overlay_position ?? null,
           overlay_height_pct: p.overlay_height_pct ?? null,
+          custom_x_frac: fracMap[p.id]?.x_frac ?? null,
+          custom_width_frac: fracMap[p.id]?.w_frac ?? null,
         }));
 
         if (toResize.length > 0) {

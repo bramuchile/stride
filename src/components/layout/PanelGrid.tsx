@@ -3,9 +3,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { PanelSlot } from "./PanelSlot";
 import { PanelResizer, RESIZER_W } from "@/components/PanelResizer";
 import { SIDEBAR_WIDTH, HEADER_HEIGHT } from "@/hooks/useWebviews";
+import { useUpdatePanelWidthFracs } from "@/hooks/usePanels";
 import type { LayoutType, Panel, PanelLayoutInfo } from "@/types";
 
 const MIN_COL_FRAC = 0.12;
+
+/** Inicializa fracciones desde los datos del panel (DB) si están disponibles. */
+function initFractions(panels: Panel[], colCount: number): number[] {
+  if (panels.length > 0 && panels.some((p) => p.width_frac != null)) {
+    const fracs = panels.map((p) => p.width_frac ?? 1 / colCount);
+    const total = fracs.reduce((s, f) => s + f, 0);
+    return fracs.map((f) => f / total);
+  }
+  return Array.from({ length: colCount }, () => 1 / colCount);
+}
 
 interface Props {
   panels: Panel[];
@@ -20,13 +31,23 @@ export function PanelGrid({ panels, layout }: Props) {
 
   const colCount = layout === "2x2" ? 2 : sorted.length;
 
-  const [widthFractions, setWidthFractions] = useState<number[]>(() =>
-    Array.from({ length: colCount }, () => 1 / colCount)
+  // Clave que cambia cuando el workspace cambia (distintos panelIds) o los fracs se actualizan
+  const panelFracsKey = useMemo(
+    () => sorted.map((p) => `${p.id}:${p.width_frac ?? ""}`).join(","),
+    [sorted]
   );
 
+  const [widthFractions, setWidthFractions] = useState<number[]>(() =>
+    initFractions(sorted, colCount)
+  );
+
+  // Reinicializar fracciones cuando cambia el workspace, el layout o los datos de DB
   useEffect(() => {
-    setWidthFractions(Array.from({ length: colCount }, () => 1 / colCount));
-  }, [colCount, layout]);
+    setWidthFractions(initFractions(sorted, colCount));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelFracsKey, colCount, layout]);
+
+  const updatePanelWidthFracs = useUpdatePanelWidthFracs();
 
   const widthFractionsRef = useRef(widthFractions);
   widthFractionsRef.current = widthFractions;
@@ -91,19 +112,29 @@ export function PanelGrid({ panels, layout }: Props) {
             };
           });
 
+          // Reposicionar WebViews nativos con los nuevos anchos
           await invoke("resize_panel_webviews", {
             panels: panelInfos,
             layout,
             sidebarWidth: SIDEBAR_WIDTH,
             headerHeight: HEADER_HEIGHT,
           }).catch(console.error);
+
+          // Persistir fracciones en SQLite para restaurarlas al volver al workspace
+          updatePanelWidthFracs(
+            sorted.map((p, i) => ({
+              id: p.id,
+              workspace_id: p.workspace_id,
+              width_frac: finalFractions[i] ?? 1 / sorted.length,
+            }))
+          ).catch(console.error);
         }
       };
 
       document.addEventListener("mousemove", handleMove);
       document.addEventListener("mouseup", handleUp);
     },
-    [sorted, layout]
+    [sorted, layout, updatePanelWidthFracs]
   );
 
   // 2x2: grid fijo sin separadores arrastrables

@@ -82,7 +82,7 @@ export function CreateWorkspaceDialog({ open, onClose }: Props) {
     for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
       const panel: Panel = {
-        id: `p-${workspaceId}-${i}`,
+        id: crypto.randomUUID(),
         workspace_id: workspaceId,
         type: s.type,
         url: s.type === "WEB" ? (s.url || undefined) : undefined,

@@ -67,6 +67,8 @@ async function runMigrations(db: Database): Promise<void> {
     `ALTER TABLE panels ADD COLUMN overlay_widget_id TEXT`,
     `ALTER TABLE panels ADD COLUMN overlay_position TEXT`,
     `ALTER TABLE panels ADD COLUMN overlay_height_pct REAL`,
+    // Fracción de ancho por panel (0.0–1.0) — persistida al arrastrar el PanelResizer
+    `ALTER TABLE panels ADD COLUMN width_frac REAL`,
   ];
 
   for (const sql of migrations) {

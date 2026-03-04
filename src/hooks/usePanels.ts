@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getDb } from "@/lib/db";
 import type { Panel } from "@/types";
@@ -11,7 +12,7 @@ export function usePanels(workspaceId: string | null) {
       const db = await getDb();
       return db.select<Panel[]>(
         `SELECT id, workspace_id, type, url, widget_id, position,
-                overlay_widget_id, overlay_position, overlay_height_pct
+                overlay_widget_id, overlay_position, overlay_height_pct, width_frac
          FROM panels WHERE workspace_id = $1 ORDER BY position ASC`,
         [workspaceId]
       );
@@ -42,6 +43,22 @@ export function useUpdatePanel() {
     onSuccess: (_data, panel) =>
       qc.invalidateQueries({ queryKey: ["panels", panel.workspace_id] }),
   });
+}
+
+/** Guarda las fracciones de ancho de los paneles tras un drag del PanelResizer. */
+export function useUpdatePanelWidthFracs() {
+  const qc = useQueryClient();
+  return useCallback(
+    async (panels: Array<{ id: string; workspace_id: string; width_frac: number }>) => {
+      if (panels.length === 0) return;
+      const db = await getDb();
+      for (const p of panels) {
+        await db.execute("UPDATE panels SET width_frac = $1 WHERE id = $2", [p.width_frac, p.id]);
+      }
+      qc.invalidateQueries({ queryKey: ["panels", panels[0].workspace_id] });
+    },
+    [qc]
+  );
 }
 
 export function useCreatePanel() {

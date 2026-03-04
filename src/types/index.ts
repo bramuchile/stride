@@ -20,6 +20,8 @@ export interface Panel {
   overlay_widget_id?: WidgetId;
   overlay_position?: "top" | "bottom";
   overlay_height_pct?: number;
+  // Fracción de ancho guardada al redimensionar (0.0–1.0); null = layout por defecto
+  width_frac?: number | null;
 }
 
 export interface PanelLayoutInfo {

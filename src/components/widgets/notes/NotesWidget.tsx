@@ -509,7 +509,8 @@ export function NotesWidget({ panelId, panelUrl, position = "bottom", onCollapse
       style={{
         display: "flex", flexDirection: "column",
         height: "100%", width: "100%",
-        marginTop:10,
+        marginTop:20,
+        paddingBottom:10,
         background: "rgba(15,13,23,0.95)",
         overflow: "hidden",
         position: "relative",

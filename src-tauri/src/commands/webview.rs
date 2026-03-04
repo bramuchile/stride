@@ -139,6 +139,18 @@ pub async fn create_panel_webview<R: Runtime>(
 
     let webview_label = format!("panel-{}", panel_id);
 
+    // Guardia de idempotencia: si el webview ya existe (ej. doble invocación por
+    // re-render de React o race en TanStack Query), registrarlo y retornar sin error.
+    if app.get_webview(&webview_label).is_some() {
+        let registry = app.state::<WebviewRegistry>();
+        registry
+            .0
+            .lock()
+            .unwrap()
+            .insert(panel_id, webview_label.clone());
+        return Ok(webview_label);
+    }
+
     // Todos los webviews comparten el mismo directorio de datos
     // → WebView2 comparte cookies y sesión automáticamente
     let data_dir = app
