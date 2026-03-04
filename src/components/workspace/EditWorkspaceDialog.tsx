@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useUpdateWorkspace } from "@/hooks/useWorkspaces";
+import { useUpdateWorkspace, useDeleteWorkspace, useWorkspaces } from "@/hooks/useWorkspaces";
 import { useUpdatePanel } from "@/hooks/usePanels";
 import { usePanels } from "@/hooks/usePanels";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
@@ -58,11 +58,14 @@ export function EditWorkspaceDialog({ workspace, startAtPanels = false, onClose 
   const [name, setName] = useState(workspace?.name ?? "");
   const [icon, setIcon] = useState(workspace?.icon ?? "📁");
   const [slots, setSlots] = useState<SlotState[]>([]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const { data: panels = [] } = usePanels(workspace?.id ?? null);
+  const { data: workspaces = [] } = useWorkspaces();
   const updateWorkspace = useUpdateWorkspace();
   const updatePanel = useUpdatePanel();
-  const { webviewMap } = useWorkspaceStore();
+  const deleteWorkspace = useDeleteWorkspace();
+  const { webviewMap, activeWorkspaceId, setActiveWorkspace, unregisterWebview } = useWorkspaceStore();
 
   // Sync state when workspace or panels change
   useEffect(() => {
@@ -78,6 +81,24 @@ export function EditWorkspaceDialog({ workspace, startAtPanels = false, onClose 
       setSlots(panels.map(panelToSlot));
     }
   }, [panels]);
+
+  async function handleDelete() {
+    if (!workspace) return;
+    // Destruir WebViews de los paneles de este workspace
+    for (const slot of slots) {
+      if (webviewMap[slot.id]) {
+        await invoke("destroy_panel_webview", { panelId: slot.id }).catch(console.error);
+        unregisterWebview(slot.id);
+      }
+    }
+    await deleteWorkspace.mutateAsync(workspace.id);
+    // Si era el workspace activo, cambiar al primero disponible
+    if (activeWorkspaceId === workspace.id) {
+      const remaining = workspaces.filter((ws) => ws.id !== workspace.id);
+      if (remaining.length > 0) setActiveWorkspace(remaining[0].id);
+    }
+    handleClose();
+  }
 
   function updateSlot(i: number, patch: Partial<SlotState>) {
     setSlots((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
@@ -131,6 +152,7 @@ export function EditWorkspaceDialog({ workspace, startAtPanels = false, onClose 
 
   function handleClose() {
     setStep("info");
+    setConfirmDelete(false);
     onClose();
   }
 
@@ -182,6 +204,40 @@ export function EditWorkspaceDialog({ workspace, startAtPanels = false, onClose 
             <p className="text-[10px]" style={{ color: "#6b7280" }}>
               Layout: <span style={{ color: "#9ca3af" }}>{workspace.layout}</span> · Para cambiar el layout crea un nuevo workspace.
             </p>
+
+            {/* Zona de peligro */}
+            <div className="pt-1" style={{ borderTop: "1px solid #2a2d31" }}>
+              {!confirmDelete ? (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  className="text-[11px] transition-colors"
+                  style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  Eliminar workspace…
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px]" style={{ color: "#9ca3af" }}>
+                    ¿Eliminar «{workspace.name}»? No se puede deshacer.
+                  </span>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleteWorkspace.isPending}
+                    className="text-[11px] px-2 py-0.5 rounded transition-colors"
+                    style={{ background: "#ef4444", color: "#fff", border: "none", cursor: "pointer" }}
+                  >
+                    Sí, eliminar
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="text-[11px]"
+                    style={{ color: "#6b7280", background: "none", border: "none", cursor: "pointer" }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="ghost" onClick={handleClose} style={{ color: "#6b7280" }}>Cancelar</Button>

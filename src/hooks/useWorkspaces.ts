@@ -51,8 +51,12 @@ export function useDeleteWorkspace() {
   return useMutation({
     mutationFn: async (id: string) => {
       const db = await getDb();
+      await db.execute("DELETE FROM panels WHERE workspace_id = $1", [id]);
       await db.execute("DELETE FROM workspaces WHERE id = $1", [id]);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["workspaces"] }),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      qc.removeQueries({ queryKey: ["panels", id] });
+    },
   });
 }
