@@ -7,6 +7,10 @@ use tauri_plugin_opener::OpenerExt;
 
 pub struct WebviewRegistry(pub Mutex<HashMap<String, String>>);
 
+// Gap físico entre WebViews nativos adyacentes. El PanelResizer React vive en ese espacio.
+// Debe coincidir con RESIZER_W exportado desde PanelResizer.tsx.
+const RESIZER_WIDTH: f64 = 5.0;
+
 #[derive(Clone, Serialize)]
 struct PanelNavigatedPayload {
     panel_id: String,
@@ -33,30 +37,33 @@ fn calculate_bounds(
 
     let (mut pos, mut size) = match layout {
         "2col" => {
-            let col_width = available_width / 2.0;
-            let x = sidebar_width + (position as f64 * col_width);
+            // 1 resizer horizontal → se descuenta del ancho disponible para WebViews
+            let col_width = (available_width - RESIZER_WIDTH) / 2.0;
+            let x = sidebar_width + position as f64 * (col_width + RESIZER_WIDTH);
             (
                 LogicalPosition::new(x, header_height),
                 LogicalSize::new(col_width, available_height),
             )
         }
         "3col" => {
-            let col_width = available_width / 3.0;
-            let x = sidebar_width + (position as f64 * col_width);
+            // 2 resizers horizontales
+            let col_width = (available_width - 2.0 * RESIZER_WIDTH) / 3.0;
+            let x = sidebar_width + position as f64 * (col_width + RESIZER_WIDTH);
             (
                 LogicalPosition::new(x, header_height),
                 LogicalSize::new(col_width, available_height),
             )
         }
         "2x2" => {
-            let col_width = available_width / 2.0;
-            let row_height = available_height / 2.0;
+            // 1 resizer horizontal + 1 resizer vertical
+            let col_width = (available_width - RESIZER_WIDTH) / 2.0;
+            let row_height = (available_height - RESIZER_WIDTH) / 2.0;
             let col = position % 2;
             let row = position / 2;
             (
                 LogicalPosition::new(
-                    sidebar_width + col as f64 * col_width,
-                    header_height + row as f64 * row_height,
+                    sidebar_width + col as f64 * (col_width + RESIZER_WIDTH),
+                    header_height + row as f64 * (row_height + RESIZER_WIDTH),
                 ),
                 LogicalSize::new(col_width, row_height),
             )
@@ -275,6 +282,17 @@ pub async fn resize_panel_webviews<R: Runtime>(
     let registry = app.state::<WebviewRegistry>();
     let map = registry.0.lock().unwrap();
 
+    // Número de columnas según layout — determina cuántos resizers horizontales hay.
+    let col_count: usize = match layout.as_str() {
+        "3col" => 3,
+        "2x2"  => 2,
+        _      => 2, // "2col" y default
+    };
+    // Espacio disponible para WebViews una vez descontados los resizers horizontales.
+    // Debe coincidir con el availableWidth que calcula React en PanelGrid.tsx (línea 54).
+    let resizer_total = (col_count - 1) as f64 * RESIZER_WIDTH;
+    let available_for_webviews = logical_width - sidebar_width - resizer_total;
+
     for panel in panels {
         if let Some(label) = map.get(&panel.panel_id) {
             if let Some(webview) = app.get_webview(label) {
@@ -291,10 +309,17 @@ pub async fn resize_panel_webviews<R: Runtime>(
                 );
                 // Si el usuario redimensionó el panel arrastrando el divisor,
                 // las fracciones personalizadas sobreescriben el ancho calculado por layout.
+                // x_frac y w_frac son fracciones del espacio sin resizers (como React los envía).
+                // Se agrega el offset de resizers según el índice de columna del panel.
                 if let (Some(x_frac), Some(w_frac)) = (panel.custom_x_frac, panel.custom_width_frac) {
-                    let available_width = logical_width - sidebar_width;
-                    pos.x = sidebar_width + x_frac * available_width;
-                    size.width = w_frac * available_width;
+                    let col_index = match layout.as_str() {
+                        "2x2" => panel.position % 2,
+                        _     => panel.position,
+                    };
+                    pos.x = sidebar_width
+                        + x_frac * available_for_webviews
+                        + col_index as f64 * RESIZER_WIDTH;
+                    size.width = w_frac * available_for_webviews;
                 }
                 webview
                     .set_bounds(tauri::Rect {
@@ -369,24 +394,28 @@ mod tests {
         let (pos, size) = calculate_bounds("2col", 0, 1400.0, 900.0, 52.0, 62.0, None, None, None);
         assert_eq!(pos.x, 52.0);
         assert_eq!(pos.y, 62.0);
-        assert!((size.width - 674.0).abs() < 0.01); // (1400-52)/2
-        assert_eq!(size.height, 838.0);              // 900-62
+        // avail = (1400-52) - 5 = 1343 → col_width = 671.5
+        assert!((size.width - 671.5).abs() < 0.01);
+        assert_eq!(size.height, 838.0); // 900-62
     }
 
     #[test]
     fn test_bounds_2col_right() {
         let (pos, _) = calculate_bounds("2col", 1, 1400.0, 900.0, 52.0, 62.0, None, None, None);
-        assert!((pos.x - 726.0).abs() < 0.01); // 52 + 674
+        // x = 52 + 1 * (671.5 + 5) = 728.5  → gap de 5px entre paneles
+        assert!((pos.x - 728.5).abs() < 0.01);
         assert_eq!(pos.y, 62.0);
     }
 
     #[test]
     fn test_bounds_2x2_bottom_right() {
         let (pos, size) = calculate_bounds("2x2", 3, 1400.0, 900.0, 52.0, 62.0, None, None, None);
-        assert!((pos.x - 726.0).abs() < 0.01);  // 52 + 674
-        assert!((pos.y - 481.0).abs() < 0.01);  // 62 + 419
-        assert!((size.width - 674.0).abs() < 0.01);
-        assert!((size.height - 419.0).abs() < 0.01); // 838/2
+        // avail_w = 1343 → col = 671.5; avail_h = 838-5 = 833 → row = 416.5
+        // pos=3 → col=1, row=1: x = 52 + 676.5 = 728.5; y = 62 + 421.5 = 483.5
+        assert!((pos.x - 728.5).abs() < 0.01);
+        assert!((pos.y - 483.5).abs() < 0.01);
+        assert!((size.width - 671.5).abs() < 0.01);
+        assert!((size.height - 416.5).abs() < 0.01);
     }
 
     #[test]

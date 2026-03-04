@@ -1,6 +1,7 @@
 import { ScratchpadWidget } from "@/components/widgets/scratchpad/ScratchpadWidget";
 import { NextMeetingWidget } from "@/components/widgets/next-meeting/NextMeetingWidget";
 import { NotesWidget } from "@/components/widgets/notes/NotesWidget";
+import { WeatherWidget } from "@/components/widgets/weather/WeatherWidget";
 import type { Panel, WidgetId } from "@/types";
 
 interface Props {
@@ -14,6 +15,8 @@ const WIDGET_META: Record<WidgetId, { label: string; dotColor: string; lineColor
   "next-meeting": { label: "próxima reunión", dotColor: "var(--accent)", lineColor: "var(--accent)" },
   "scratchpad":   { label: "notas rápidas",   dotColor: "var(--amber)",  lineColor: "var(--amber)" },
   "notes":        { label: "notas rápidas",   dotColor: "var(--amber)",  lineColor: "var(--amber)" },
+  // WeatherWidget gestiona su propio header con --wx dinámico; estas props son requeridas por el tipo Record
+  "weather":      { label: "clima",            dotColor: "var(--blue)",   lineColor: "var(--blue)" },
 };
 
 export function PanelOverlay({ panel, widgetId, position, onCollapse }: Props) {
@@ -25,6 +28,16 @@ export function PanelOverlay({ panel, widgetId, position, onCollapse }: Props) {
       <NotesWidget
         panelId={panel.id}
         panelUrl={panel.url}
+        position={position}
+        onCollapse={onCollapse}
+      />
+    );
+  }
+
+  // El WeatherWidget también gestiona su propio header (color dinámico --wx según condición)
+  if (widgetId === "weather") {
+    return (
+      <WeatherWidget
         position={position}
         onCollapse={onCollapse}
       />
