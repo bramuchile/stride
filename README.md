@@ -11,7 +11,7 @@ Open Gmail, Calendar, GitHub, and your daily apps side-by-side — no tabs, no b
 [![Built with Tauri](https://img.shields.io/badge/built_with-Tauri_2-FFC131?style=flat-square&logo=tauri)](https://tauri.app)
 [![Built with React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 
-> **Status:** Phase 1 (MVP) complete — Windows only.
+> **Status:** Phase 2 in progress — Windows only.
 
 ---
 
@@ -25,16 +25,50 @@ Panels can also host **integrated widgets** — lightweight tools like a scratch
 
 ---
 
+## Download
+
+Pre-built installers are available on the [Releases page](https://github.com/bramuchile/stride/releases).
+
+| Installer | Format |
+|-----------|--------|
+| `Stride_0.1.0_x64-setup.exe` | NSIS installer |
+| `Stride_0.1.0_x64.msi` | MSI package |
+
+**Requirements:** Windows 10/11 (x64). [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is bundled with the installer.
+
+---
+
 ## Features
 
+**Panels & Layouts**
 - **Native multi-panel layout** — 2-column, 3-column, and 2×2 grid layouts
-- **Shared session** — cookies and localStorage shared across all panels via a single WebView2 profile
-- **Per-panel address bar** — click to navigate or search within any panel
-- **Integrated widgets** — widgets reduce the webview area and live structurally inside the panel
-- **Scratchpad widget** — persistent notes, per panel, across sessions
-- **Slim sidebar** — 52px, workspace switching with keyboard shortcuts
+- **Shared session** — cookies and localStorage shared across all panels via a single WebView2 profile; sign in to Google once, all panels pick it up
+- **Per-panel address bar** — navigate or search within any panel
+- **Drag-to-resize** — drag panel separators to adjust widths; sizes persist across sessions
 - **Deferred loading** — WebViews are created once and shown/hidden on workspace switch (never recreated)
-- **Auto-update** — built-in updater via Tauri updater plugin
+
+**Widgets**
+- **Notes widget** — per-panel persistent notes with markdown rendering (headings, bullets, checkboxes, code, links), view/edit toggle, auto-save (500ms debounce), version history (last 5), pin a note above the editor, word count, collapsible
+- **Weather widget** — current conditions with dynamic color theming
+- **Widget overlays** — widgets dock above or below the WebView area (not floating), with configurable height
+
+**Workspaces**
+- **4 preloaded workspaces** — ready to use on first launch, fully reconfigurable
+- **Create & edit workspaces** — choose name, emoji icon, layout, and configure each panel's URL or widget
+- **Keyboard navigation** — `Ctrl+1…9` to jump to any workspace, `Ctrl+Tab` to cycle
+
+**Shell**
+- **Custom titlebar** — Windows 11-style controls (minimize/maximize/close), update notification banner
+- **Slim sidebar** — 52px, active workspace indicator (accent pill + glow), hover tooltips
+- **Panel header** — site favicon, connection status dot, reload and widget controls
+
+**WebView2 reliability**
+- Standard Chrome user agent — fixes WhatsApp Web, Google Meet, and other sites that reject non-browser UAs
+- External popups redirect to the system browser instead of opening a new WebView
+- Permission handler for camera, microphone, geolocation, and notifications
+
+**System**
+- **Auto-update** — background update check on launch; banner in titlebar with one-click install
 - **Error reporting** — "Copy error" button formats diagnostics for GitHub Issues
 
 ---
@@ -43,24 +77,12 @@ Panels can also host **integrated widgets** — lightweight tools like a scratch
 
 | Workspace | Layout | Panels |
 |-----------|--------|--------|
-| Work      | 2-col  | Gmail · Google Calendar |
-| Personal  | 2-col  | YouTube · Scratchpad |
-| Dev       | 3-col  | GitHub · localhost:3000 · Vercel |
+| Trabajo 💼 | 3-col | WhatsApp Web · ChatGPT · YouTube — with Weather overlay (top) and Notes overlay (bottom) |
+| Finanzas 📊 | 2-col | Yahoo Finance · TradingView |
+| Social 🎮 | 3-col | WhatsApp Web · X · Instagram |
+| Dev ⚙️ | 3-col | GitHub · GitHub · Vercel |
 
 These are seeds for first launch — workspaces are fully configurable.
-
----
-
-## Download
-
-Pre-built installers are available on the [Releases page](https://github.com/your-org/stride/releases).
-
-| Installer | Format |
-|-----------|--------|
-| `Stride_0.1.0_x64-setup.exe` | NSIS installer |
-| `Stride_0.1.0_x64.msi` | MSI package |
-
-**Requirements:** Windows 10/11 (x64). [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is bundled with the installer.
 
 ---
 
@@ -146,18 +168,33 @@ stride/
 
 ## Roadmap
 
-### Phase 2 — In Progress
-- Visual workspace editor (drag panels, change URLs, reorder)
-- Custom layouts
-- Calendar widget (Google Calendar API)
-- Notes widget redesign
-- Export / import workspaces as JSON
+### Done
+- [x] Multi-panel layouts (2-col, 3-col, 2×2)
+- [x] Shared WebView2 session (single login, all panels)
+- [x] SQLite persistence (workspaces, panels, notes, history)
+- [x] Deferred WebView loading (create once, show/hide)
+- [x] Drag-to-resize panels with persisted widths
+- [x] Widget overlay architecture (top/bottom dock, configurable height)
+- [x] Notes widget — markdown, history, pin, auto-save, word count
+- [x] Weather widget
+- [x] Custom titlebar (Windows 11 controls, drag region, update banner)
+- [x] Sidebar with workspace switcher
+- [x] Create & edit workspaces dialog
+- [x] Keyboard shortcuts (Ctrl+1…9, Ctrl+Tab)
+- [x] WebView2 hardening (user agent, popup redirect, permission handler)
+- [x] Auto-update via GitHub Releases
+- [x] Error boundary with formatted diagnostics
+
+### Next
+- [ ] Empty panel screen (new-tab style with quick-access tiles)
+- [ ] Next Meeting widget — Google Calendar API integration
+- [ ] Export / import workspaces as JSON
 
 ### Phase 3
-- Focus mode (distraction filter based on EasyList)
-- Additional widgets: Focus Timer, Daily Briefing, Asset Price, Service Status
-- Cloud sync (Pro plan)
-- macOS + Linux support
+- [ ] Focus mode (distraction filter based on EasyList)
+- [ ] Additional widgets: Focus Timer, Daily Briefing, Asset Price, Service Status
+- [ ] Cloud sync (Pro plan)
+- [ ] macOS + Linux support
 
 ---
 
