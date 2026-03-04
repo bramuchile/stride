@@ -1,7 +1,16 @@
 (function () {
 
   var BUTTON_ID = "wa-stride-sidebar-toggle";
-  var SCRIPT_VERSION = "2026-03-03-1";
+  var SCRIPT_VERSION = "2026-03-03-2";
+
+  // Icono SVG: ventana con panel lateral — stroke 1.8px, rounded, estilo outline de WA.
+  var SVG_ICON =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"' +
+    ' fill="none" stroke="currentColor" stroke-width="1.8"' +
+    ' stroke-linecap="round" stroke-linejoin="round">' +
+    '<rect x="3" y="3" width="18" height="18" rx="2.5"/>' +
+    '<line x1="9" y1="3.5" x2="9" y2="20.5"/>' +
+    '</svg>';
   var STYLE_ID = "wa-stride-sidebar-style";
   var BODY_CLS = "wa-stride-sidebar-hidden";
   var COL_ATTR = "data-wa-stride-col";
@@ -95,6 +104,46 @@
     "  box-shadow: none !important;",
     "  outline: 0 !important;",
     "}",
+    // ── Botón — aspecto indistinguible de los iconos nativos de WhatsApp ──
+    "#" + BUTTON_ID + " {",
+    "  display: flex !important;",
+    "  align-items: center !important;",
+    "  justify-content: center !important;",
+    "  width: 42px !important;",
+    "  height: 42px !important;",
+    "  border-radius: 50% !important;",
+    "  background: transparent !important;",
+    "  border: none !important;",
+    "  outline: none !important;",
+    "  cursor: pointer !important;",
+    "  padding: 0 !important;",
+    "  margin: 0 !important;",
+    "  box-shadow: none !important;",
+    "  color: rgba(255,255,255,0.62) !important;",
+    "  transition: background 0.15s ease, color 0.15s ease !important;",
+    "  -webkit-tap-highlight-color: transparent !important;",
+    "}",
+    "#" + BUTTON_ID + ":hover {",
+    "  background: rgba(255,255,255,0.1) !important;",
+    "  color: rgba(255,255,255,1) !important;",
+    "}",
+    "#" + BUTTON_ID + ":active {",
+    "  background: rgba(255,255,255,0.15) !important;",
+    "}",
+    // Estado activo (sidebar oculta) — verde WhatsApp, igual que el icono de Chats activo.
+    "#" + BUTTON_ID + "[data-navbar-item-selected=\"true\"] {",
+    "  color: #00a884 !important;",
+    "}",
+    "#" + BUTTON_ID + "[data-navbar-item-selected=\"true\"]:hover {",
+    "  background: rgba(0,168,132,0.1) !important;",
+    "}",
+    "#" + BUTTON_ID + " svg {",
+    "  width: 24px !important;",
+    "  height: 24px !important;",
+    "  display: block !important;",
+    "  flex-shrink: 0 !important;",
+    "  pointer-events: none !important;",
+    "}",
   ].join("\n");
 
   function ensureStyles() {
@@ -164,6 +213,8 @@
 
     var cls = sib.className || "";
     if (typeof cls === "string" && cls.indexOf("_as6h") !== -1) return sib;
+    // Separador conocido en versiones recientes de WhatsApp Web.
+    if (typeof cls === "string" && cls.indexOf("_ak9t") !== -1) return sib;
     if (sib.getAttribute && sib.getAttribute("style") && sib.getAttribute("style").indexOf("width") !== -1) {
       return sib;
     }
@@ -276,7 +327,7 @@
       var failBtn = document.getElementById(BUTTON_ID);
       if (failBtn) {
         failBtn.title = "No se encontro el contenedor de chats";
-        failBtn.style.background = "rgba(210,50,50,0.9)";
+        failBtn.style.opacity = "0.4";
       }
       return;
     }
@@ -286,11 +337,10 @@
 
     var btn = document.getElementById(BUTTON_ID);
     if (btn) {
-      btn.textContent = hidden ? ">>" : "<<";
+      // Mantener el mismo icono SVG; el estado activo lo maneja WhatsApp via data-navbar-item-selected.
       btn.setAttribute("aria-pressed", hidden ? "true" : "false");
       btn.setAttribute("data-navbar-item-selected", hidden ? "true" : "false");
       btn.title = "Ocultar/mostrar sidebar (Ctrl+Shift+L)";
-      btn.style.background = "rgba(0,0,0,0.45)";
     }
   }
 
@@ -321,21 +371,8 @@
     btn.setAttribute("data-wa-stride-toggle", "true");
     btn.removeAttribute("data-navbar-item-index");
     btn.title = "Ocultar/mostrar sidebar (Ctrl+Shift+L)";
-    btn.textContent = "||";
-    btn.style.width = "28px";
-    btn.style.height = "28px";
-    btn.style.border = "none";
-    btn.style.borderRadius = "999px";
-    btn.style.cursor = "pointer";
-    btn.style.fontWeight = "700";
-    btn.style.fontFamily = "monospace";
-    btn.style.fontSize = "14px";
-    btn.style.lineHeight = "1";
-    btn.style.display = "inline-flex";
-    btn.style.alignItems = "center";
-    btn.style.justifyContent = "center";
-    btn.style.background = "transparent";
-    btn.style.color = "currentColor";
+    btn.innerHTML = SVG_ICON;
+    // El resto de estilos los gestiona CSS_RULES via #BUTTON_ID (hover, color, tamaño, etc.).
 
     if (isNew) {
       btn.addEventListener("click", function (e) {
