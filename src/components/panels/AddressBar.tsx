@@ -1,10 +1,30 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Lock, Globe } from "lucide-react";
+import { ArrowRight, Lock, Globe, Search } from "lucide-react";
 
 interface Props {
   initialUrl: string;
   onNavigate: (url: string) => void;
   onClose: () => void;
+}
+
+function resolveInput(raw: string): string {
+  const s = raw.trim();
+  if (!s) return s;
+  // Ya tiene protocolo → navegar directo
+  if (/^https?:\/\//i.test(s)) return s;
+  // Sin espacios + patrón hostname válido + TLD de 2+ letras → URL
+  if (!s.includes(" ") && /^[\w.-]+(:\d+)?(\/.*)?$/.test(s) && /\.[a-zA-Z]{2,}/.test(s)) {
+    return `https://${s}`;
+  }
+  // Resto → Google Search
+  return `https://www.google.com/search?q=${encodeURIComponent(s)}`;
+}
+
+function isSearchQuery(input: string): boolean {
+  const s = input.trim();
+  if (!s || /^https?:\/\//i.test(s)) return false;
+  if (!s.includes(" ") && /^[\w.-]+(:\d+)?(\/.*)?$/.test(s) && /\.[a-zA-Z]{2,}/.test(s)) return false;
+  return true;
 }
 
 // Barra de direcciones flotante estilo Claude Desktop
@@ -28,24 +48,23 @@ export function AddressBar({ initialUrl, onNavigate, onClose }: Props) {
   }, [onClose]);
 
   const handleSubmit = () => {
-    let url = value.trim();
+    const url = resolveInput(value);
     if (!url) return;
-    // Agregar https:// si no tiene protocolo
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      url = `https://${url}`;
-    }
     onNavigate(url);
     onClose();
   };
 
-  const isHttps = initialUrl.startsWith("https://");
+  const isHttps = value.startsWith("https://");
+  const isSearch = isSearchQuery(value);
 
   return (
     <div className="absolute inset-0 z-50 flex items-center px-3 bg-zinc-900/98 border-b border-zinc-700/60">
       <div className="flex w-full items-center gap-2 rounded-full bg-zinc-800 border border-zinc-600/50 px-3 h-[28px] focus-within:border-zinc-400/70 transition-colors">
-        {/* Icono de seguridad */}
+        {/* Icono de seguridad / búsqueda */}
         <span className="flex-shrink-0 text-zinc-500">
-          {isHttps ? (
+          {isSearch ? (
+            <Search size={11} strokeWidth={2} />
+          ) : isHttps ? (
             <Lock size={11} strokeWidth={2} />
           ) : (
             <Globe size={11} strokeWidth={2} />
