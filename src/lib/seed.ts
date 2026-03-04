@@ -38,15 +38,15 @@ export async function seedIfNeeded(): Promise<void> {
       type: "WEB",
       url: "https://web.whatsapp.com",
       position: 0,
-      overlay_widget_id: "next-meeting",
+      overlay_widget_id: "weather",
       overlay_position: "top",
-      overlay_height_pct: 19,
+      overlay_height_pct: 30,
     },
     {
       id: "p-t-2",
       workspace_id: "ws-trabajo",
       type: "WEB",
-      url: "https://news.ycombinator.com",
+      url: "https://chatgpt.com",
       position: 1,
     },
     {
@@ -57,7 +57,7 @@ export async function seedIfNeeded(): Promise<void> {
       position: 2,
       overlay_widget_id: "notes",
       overlay_position: "bottom",
-      overlay_height_pct: 28,
+      overlay_height_pct: 40,
     },
 
     // ── Finanzas (2col) ──

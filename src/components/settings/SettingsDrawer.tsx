@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, RotateCcw, Github, Info, Database, Palette, AlertTriangle } from "lucide-react";
 import { getDb } from "@/lib/db";
+import { seedIfNeeded } from "@/lib/seed";
 
 interface Props {
   open: boolean;
@@ -16,6 +17,8 @@ async function resetDatabase(): Promise<void> {
   await db.execute("DELETE FROM panels");
   await db.execute("DELETE FROM workspaces");
   await db.execute("DELETE FROM settings");
+  // Sembrar antes del reload para que los datos estén disponibles inmediatamente
+  await seedIfNeeded();
   window.location.reload();
 }
 
