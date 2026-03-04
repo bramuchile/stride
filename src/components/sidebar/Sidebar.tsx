@@ -1,4 +1,5 @@
 import { Settings, Target } from "lucide-react";
+import strideIcon from "@/assets/stride-icon.svg";
 import {
   Tooltip,
   TooltipContent,
@@ -42,19 +43,14 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace, onOpenSet
         {/* Logo */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <div
-              className="flex items-center justify-center font-bold cursor-default select-none mb-[14px] flex-shrink-0"
-              style={{
-                width: "32px", height: "32px",
-                background: "linear-gradient(135deg, var(--accent) 0%, #9B6EF7 100%)",
-                borderRadius: "9px",
-                fontSize: "14px", color: "#fff",
-                letterSpacing: "-0.03em",
-                boxShadow: "0 4px 16px rgba(124,106,247,0.35)",
-              }}
-            >
-              S
-            </div>
+            <img
+              src={strideIcon}
+              width={32}
+              height={32}
+              className="mb-[14px] flex-shrink-0 cursor-default select-none"
+              style={{ borderRadius: "9px" }}
+              draggable={false}
+            />
           </TooltipTrigger>
           <TooltipContent side="right">Stride</TooltipContent>
         </Tooltip>

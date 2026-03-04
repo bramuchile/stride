@@ -3,6 +3,7 @@ import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { getPendingUpdate } from "@/features/updater/useUpdater";
 import { useState, useEffect } from "react";
+import strideIcon from "@/assets/stride-icon.svg";
 
 const win = getCurrentWindow();
 
@@ -64,16 +65,13 @@ export function Titlebar() {
           pointerEvents: "none",
         }}
       >
-        <div style={{
-          width: 16, height: 16,
-          background: "linear-gradient(135deg, var(--accent), var(--accent2))",
-          borderRadius: 4,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 9, fontWeight: 700, color: "#fff",
-          flexShrink: 0,
-        }}>
-          S
-        </div>
+        <img
+          src={strideIcon}
+          width={16}
+          height={16}
+          style={{ borderRadius: 3, flexShrink: 0 }}
+          draggable={false}
+        />
         <span style={{
           fontFamily: "'Geist Mono', monospace",
           fontSize: 10, color: "var(--text3)", letterSpacing: "0.06em",

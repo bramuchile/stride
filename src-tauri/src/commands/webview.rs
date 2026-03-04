@@ -5,6 +5,8 @@ use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, 
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::commands::permissions;
+
 pub struct WebviewRegistry(pub Mutex<HashMap<String, String>>);
 
 // Gap físico entre WebViews nativos adyacentes. El PanelResizer React vive en ese espacio.
@@ -227,9 +229,13 @@ pub async fn create_panel_webview<R: Runtime>(
             .initialization_script(include_str!("./whatsapp_sidebar_toggle.js"));
     }
 
-    window
+    let webview = window
         .add_child(webview_builder, pos, size)
         .map_err(|e| e.to_string())?;
+
+    // Instalar handler de permisos (geolocalización, cámara, micrófono, notificaciones)
+    let cache = app.state::<permissions::PermissionCache>().inner().clone();
+    permissions::attach_handler(&webview, cache);
 
     let registry = app.state::<WebviewRegistry>();
     registry

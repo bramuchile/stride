@@ -26,3 +26,9 @@ dist-ssr
 
 # AI
 CLAUDE.md
+
+# Tauri signing keys — NUNCA subir al repo
+*.key
+*.pem
+src-tauri/signing/
+local/.tauri/
