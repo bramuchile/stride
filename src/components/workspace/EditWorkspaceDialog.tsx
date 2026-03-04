@@ -16,6 +16,7 @@ const WIDGET_OPTIONS: { value: WidgetId | ""; label: string }[] = [
   { value: "",              label: "Sin widget" },
   { value: "next-meeting",  label: "Próxima reunión" },
   { value: "scratchpad",    label: "Notas rápidas" },
+  { value: "weather",       label: "Clima" },
 ];
 
 interface SlotState {
@@ -301,6 +302,7 @@ export function EditWorkspaceDialog({ workspace, startAtPanels = false, onClose 
                       <option value="">Selecciona widget</option>
                       <option value="scratchpad">Notas rápidas</option>
                       <option value="next-meeting">Próxima reunión</option>
+                      <option value="weather">Clima</option>
                     </select>
                   )}
                 </div>

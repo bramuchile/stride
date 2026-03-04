@@ -18,7 +18,8 @@ const LAYOUT_OPTIONS: { value: LayoutType; label: string; icon: string; slots: n
 const WIDGET_OPTIONS: { value: WidgetId | ""; label: string }[] = [
   { value: "",              label: "Sin widget" },
   { value: "next-meeting",  label: "Próxima reunión" },
-  { value: "notes",    label: "Notas rápidas" },
+  { value: "notes",         label: "Notas rápidas" },
+  { value: "weather",       label: "Clima" },
 ];
 
 interface SlotConfig {
@@ -323,6 +324,7 @@ export function CreateWorkspaceDialog({ open, onClose }: Props) {
                       <option value="">Selecciona widget</option>
                       <option value="scratchpad">Notas rápidas</option>
                       <option value="next-meeting">Próxima reunión</option>
+                      <option value="weather">Clima</option>
                     </select>
                   )}
                 </div>
