@@ -31,8 +31,8 @@ Pre-built installers are available on the [Releases page](https://github.com/bra
 
 | Installer | Format |
 |-----------|--------|
-| `Stride_0.1.0_x64-setup.exe` | NSIS installer |
-| `Stride_0.1.0_x64.msi` | MSI package |
+| [`Stride_0.1.3_x64-setup.exe`](https://github.com/bramuchile/stride/releases) | NSIS installer |
+| [`Stride_0.1.3_x64.msi`](https://github.com/bramuchile/stride/releases) | MSI package |
 
 **Requirements:** Windows 10/11 (x64). [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is bundled with the installer.
 
