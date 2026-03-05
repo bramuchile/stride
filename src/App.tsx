@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
@@ -15,16 +15,24 @@ const queryClient = new QueryClient({
 });
 
 function AppInner() {
+  const [dbReady, setDbReady] = useState(false);
+
   useKeyboardShortcuts();
   useUpdater();
 
   useEffect(() => {
-    // Inicializar DB y sembrar workspaces de ejemplo si es el primer arranque
+    // Inicializar DB y sembrar workspaces ANTES de renderizar AppShell.
+    // Sin este await, useWorkspaces() dispara la query con la BD vacía (race condition).
     getDb()
       .then(() => seedIfNeeded())
-      .catch(console.error);
+      .then(() => setDbReady(true))
+      .catch((e) => {
+        console.error(e);
+        setDbReady(true); // Arrancar igualmente aunque falle el seed
+      });
   }, []);
 
+  if (!dbReady) return null;
   return <AppShell />;
 }
 
