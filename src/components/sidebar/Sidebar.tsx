@@ -175,7 +175,7 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace, onOpenSet
                     "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)";
                 }}
               >
-                JD
+                C
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">Perfil <span className="opacity-60 text-xs">(Fase 2)</span></TooltipContent>

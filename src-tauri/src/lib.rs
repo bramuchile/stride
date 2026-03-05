@@ -10,16 +10,37 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // Abrir la BD SQLite y preparar el cache de permisos
-            let db_path = app.path().app_data_dir()?.join("stride.db");
-            let conn = rusqlite::Connection::open(&db_path)
-                .expect("No se pudo abrir stride.db para permisos");
-            permissions::init_db(&conn).expect("No se pudo crear tabla permission_grants");
-            let map = permissions::load_all(&conn);
-            app.manage(PermissionCache {
-                map:  Arc::new(Mutex::new(map)),
-                conn: Arc::new(Mutex::new(conn)),
-            });
+            // Crear directorio de datos si no existe (máquina limpia)
+            let data_dir = app.path().app_data_dir()?;
+            if let Err(e) = std::fs::create_dir_all(&data_dir) {
+                eprintln!("[Stride] No se pudo crear app_data_dir: {e}");
+            }
+            let db_path = data_dir.join("stride.db");
+
+            // Abrir BD de permisos — si falla, continuar con cache en memoria vacío
+            let cache = match rusqlite::Connection::open(&db_path) {
+                Ok(conn) => {
+                    if let Err(e) = permissions::init_db(&conn) {
+                        eprintln!("[Stride] No se pudo crear tabla permission_grants: {e}");
+                    }
+                    let map = permissions::load_all(&conn);
+                    PermissionCache {
+                        map:  Arc::new(Mutex::new(map)),
+                        conn: Arc::new(Mutex::new(conn)),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[Stride] No se pudo abrir stride.db para permisos: {e}. Los permisos no se persistirán.");
+                    // Fallback: BD en memoria para que la app arranque igualmente
+                    let conn = rusqlite::Connection::open_in_memory()
+                        .expect("SQLite en memoria no disponible — fallo crítico del sistema");
+                    PermissionCache {
+                        map:  Arc::new(Mutex::new(HashMap::new())),
+                        conn: Arc::new(Mutex::new(conn)),
+                    }
+                }
+            };
+            app.manage(cache);
             Ok(())
         })
         .manage(WebviewRegistry(Mutex::new(HashMap::new())))
