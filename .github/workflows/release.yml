@@ -51,7 +51,7 @@ jobs:
           releaseBody: |
             ## Cambios en esta versión
             Ver commits para el detalle completo.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           createUpdaterArtifacts: true
           
