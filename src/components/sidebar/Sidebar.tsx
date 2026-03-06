@@ -1,4 +1,4 @@
-import { Settings, Target } from "lucide-react";
+import { Settings } from "lucide-react";
 import strideIcon from "@/assets/stride-icon.svg";
 import {
   Tooltip,
@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { WorkspaceList } from "./WorkspaceList";
+import { FocusModeButton } from "./FocusModeButton";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import type { Workspace } from "@/types";
 
@@ -100,31 +101,7 @@ export function Sidebar({ workspaces, onAddWorkspace, onEditWorkspace, onOpenSet
         {/* Iconos de fondo */}
         <div className="mt-auto flex flex-col items-center gap-1 pb-[6px] px-[7px]">
           {/* Focus Mode */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="flex items-center justify-center rounded-lg transition-all"
-                style={{
-                  width: "32px", height: "32px",
-                  background: "transparent", border: "none",
-                  color: "var(--text3)", cursor: "pointer",
-                }}
-                onMouseEnter={(e) => {
-                  const el = e.currentTarget as HTMLElement;
-                  el.style.background = "var(--elevated)";
-                  el.style.color = "var(--text2)";
-                }}
-                onMouseLeave={(e) => {
-                  const el = e.currentTarget as HTMLElement;
-                  el.style.background = "transparent";
-                  el.style.color = "var(--text3)";
-                }}
-              >
-                <Target size={16} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Focus Mode <span className="opacity-60 text-xs">(Fase 3)</span></TooltipContent>
-          </Tooltip>
+          <FocusModeButton />
 
           {/* Settings */}
           <Tooltip>

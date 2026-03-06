@@ -58,6 +58,14 @@ Pre-built installers are available on the [Releases page](https://github.com/bra
 - **Create & edit workspaces** — choose name, emoji icon, layout, and configure each panel's URL or widget
 - **Keyboard navigation** — `Ctrl+1…9` to jump to any workspace, `Ctrl+Tab` to cycle
 
+**Focus Mode**
+- **Ad filtering** — blocks ads on YouTube and across all panels via JS-level interception (`initialization_script`); default ON
+- **4-layer filter**: fetch/XHR override + CSS hide + MutationObserver + `appendChild` intercept (inline scripts)
+- **YouTube-specific**: JSON response pruning (no empty-response crashes), `ytInitialPlayerResponse` + `playerResponse` interceptors for SPA navigation
+- **EasyList integration** — ~2000 bundled domains; auto-updates every 7 days from `easylist.to`
+- **Persistent toggle** — stored in SQLite; restored before any WebView is created (no race condition)
+- **Dynamic toggle** — enable/disable without reload via `stride:focus-toggle` CustomEvent
+
 **Shell**
 - **Custom titlebar** — Windows 11-style controls (minimize/maximize/close), update notification banner
 - **Slim sidebar** — 52px, active workspace indicator (accent pill + glow), hover tooltips
@@ -150,9 +158,15 @@ stride/
 │       ├── widgets/                     # Scratchpad, Notes, and future widgets
 │       └── error/                       # ErrorBoundary + ErrorDisplay
 └── src-tauri/
+    ├── filters/
+    │   └── easylist_domains.txt         # Bundled ad domains (compile-time fallback)
     └── src/
         ├── lib.rs                       # Plugin registration + command setup
-        └── commands/webview.rs          # create/resize/show/hide/navigate WebViews
+        ├── filters.rs                   # FilterEngine + EasyList + FOCUS_MODE_ENABLED AtomicBool
+        ├── focus_filter.js              # JS template injected as initialization_script (4 layers)
+        └── commands/
+            ├── webview.rs               # create/resize/show/hide/navigate WebViews
+            └── focus.rs                 # set_focus_mode / get_focus_mode Tauri commands
 ```
 
 ---
@@ -185,6 +199,7 @@ stride/
 - [x] WebView2 hardening (user agent, popup redirect, permission handler)
 - [x] Auto-update via GitHub Releases
 - [x] Error boundary with formatted diagnostics
+- [x] Focus Mode — ad filtering (EasyList + YouTube-specific, 4-layer JS interception)
 
 ### Next
 - [ ] Empty panel screen (new-tab style with quick-access tiles)
@@ -192,7 +207,7 @@ stride/
 - [ ] Export / import workspaces as JSON
 
 ### Phase 3
-- [ ] Focus mode (distraction filter based on EasyList)
+- [x] Focus Mode (distraction filter based on EasyList) ✓
 - [ ] Additional widgets: Focus Timer, Daily Briefing, Asset Price, Service Status
 - [ ] Cloud sync (Pro plan)
 - [ ] macOS + Linux support

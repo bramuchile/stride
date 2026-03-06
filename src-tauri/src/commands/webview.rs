@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBuilder, WebviewUrl, Window};
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBuilder, WebviewUrl, WebviewWindowBuilder, Window};
 use tauri::webview::{NewWindowResponse, PageLoadEvent};
-use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::permissions;
 
@@ -12,6 +12,64 @@ pub struct WebviewRegistry(pub Mutex<HashMap<String, String>>);
 // Gap físico entre WebViews nativos adyacentes. El PanelResizer React vive en ese espacio.
 // Debe coincidir con RESIZER_W exportado desde PanelResizer.tsx.
 const RESIZER_WIDTH: f64 = 5.0;
+
+// Script inyectado en TODOS los paneles web. Escucha mensajes reenviados desde popups OAuth
+// (window.opener.postMessage) y los despacha como MessageEvent en el panel.
+// Necesario porque window.opener es null en ventanas WebviewWindowBuilder independientes.
+const PANEL_OAUTH_INIT: &str = r#"
+(function() {
+    if (!window.__TAURI_INTERNALS__) return;
+    window.__TAURI_INTERNALS__.listen('stride:opener-message', function(event) {
+        try {
+            var d = event.payload;
+            var msg = typeof d.message === 'string' ? JSON.parse(d.message) : d.message;
+            window.dispatchEvent(new MessageEvent('message', {
+                data: msg,
+                origin: d.origin || location.origin,
+                source: null
+            }));
+        } catch(e) {}
+    });
+})();
+"#;
+
+// Script inyectado en ventanas popup OAuth. Crea un window.opener falso que reenvía
+// postMessage vía Tauri al panel que originó el popup. También intercepta window.close()
+// ya que WebView2 no cierra ventanas Tauri creadas por código cuando el script llama close().
+// __POPUP_LABEL__ se reemplaza en runtime con el label JSON-encoded de la ventana popup.
+const POPUP_OAUTH_INIT: &str = r#"
+(function() {
+    var _label = __POPUP_LABEL__;
+    var _fake = {
+        closed: false,
+        postMessage: function(msg, origin) {
+            if (!window.__TAURI_INTERNALS__) return;
+            try {
+                window.__TAURI_INTERNALS__.invoke('forward_opener_message', {
+                    message: JSON.stringify(msg),
+                    origin: typeof origin === 'string' ? origin : '*'
+                }).catch(function() {});
+            } catch(e) {}
+        },
+        focus: function() {},
+        blur: function() {},
+        location: { href: 'about:blank' }
+    };
+    try {
+        Object.defineProperty(window, 'opener', {
+            get: function() { return _fake; },
+            configurable: true
+        });
+    } catch(e) {}
+    // Interceptar window.close() — ventanas Tauri no responden al close() nativo del script
+    window.close = function() {
+        if (window.__TAURI_INTERNALS__) {
+            window.__TAURI_INTERNALS__.invoke('close_stride_popup', { label: _label })
+                .catch(function() {});
+        }
+    };
+})();
+"#;
 
 #[derive(Clone, Serialize)]
 struct PanelNavigatedPayload {
@@ -160,6 +218,8 @@ pub async fn create_panel_webview<R: Runtime>(
         .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("webview2-profile");
+    // Clonar antes de que el builder consuma data_dir — se usa en el closure on_new_window
+    let popup_data_dir = data_dir.clone();
 
     let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
 
@@ -168,6 +228,7 @@ pub async fn create_panel_webview<R: Runtime>(
 
     let panel_id_for_nav = panel_id.clone();
     let app_for_popup = app.clone();
+    let popup_data_dir_closure = popup_data_dir;
     let whatsapp_toggle_script = if is_whatsapp {
         Some(include_str!("./whatsapp_sidebar_toggle.js"))
     } else {
@@ -183,9 +244,94 @@ pub async fn create_panel_webview<R: Runtime>(
         .enable_clipboard_access()
         // FIX 3: Deshabilitar zoom con Ctrl+Scroll en paneles web
         .zoom_hotkeys_enabled(false)
-        // FIX 5: Abrir target=_blank y popups en el navegador del sistema en lugar de perderlos
+        // FIX 5 (revisado): Interceptar popups OAuth y abrirlos como ventana nativa dentro de Stride.
+        // Anteriormente se mandaban al navegador del sistema (Opera/Chrome/Edge), lo que rompía
+        // el flujo OAuth completo porque el callback nunca regresaba a Stride.
         .on_new_window(move |url, _features| {
-            let _ = app_for_popup.opener().open_url(url.as_str(), None::<&str>);
+            let url_str = url.to_string();
+            // Ignorar about:blank y javascript: — evita crear una segunda ventana en blanco.
+            // Algunos sitios llaman window.open("about:blank") antes de navegar via JS.
+            if url_str.starts_with("about:") || url_str.starts_with("javascript:") || url_str.is_empty() {
+                return NewWindowResponse::Deny;
+            }
+            // Label único por timestamp — soporta múltiples popups simultáneos
+            let popup_label = format!(
+                "popup-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+            );
+            if let Ok(parsed_url) = url_str.parse::<url::Url>() {
+                let popup_label_clone = popup_label.clone();
+                let app_for_close = app_for_popup.clone();
+                // Rastrear si el popup ya cargó una URL real (≠ about:blank).
+                // about:blank después de una URL real = window.close() fue llamado.
+                let real_loaded = Arc::new(AtomicBool::new(false));
+                let real_loaded_page = real_loaded.clone();
+                // Script dinámico: incrustar el label del popup para que window.close()
+                // pueda invocar close_stride_popup con el label correcto.
+                let popup_label_js = serde_json::to_string(&popup_label).unwrap_or_default();
+                let popup_init_script = POPUP_OAUTH_INIT.replace("__POPUP_LABEL__", &popup_label_js);
+                let builder = WebviewWindowBuilder::new(
+                    &app_for_popup,
+                    &popup_label,
+                    tauri::WebviewUrl::External(parsed_url),
+                )
+                .title("Iniciar sesión")
+                .inner_size(500.0, 650.0)
+                .center()
+                .resizable(true)
+                .decorations(true)     // chrome nativo — diferente a la ventana principal (decorations: false)
+                .always_on_top(true)
+                .data_directory(popup_data_dir_closure.clone())   // misma sesión → Google ya logueado disponible
+                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                // Inyectar window.opener mock + window.close() override con label del popup
+                .initialization_script(&popup_init_script)
+                // Prevenir que el popup abra más ventanas nativas (segunda ventana en blanco)
+                .on_new_window(|_url, _features| NewWindowResponse::Deny)
+                .on_page_load(move |_webview, payload| {
+                    let nav_url = payload.url().to_string();
+                    // Detectar about:blank en CUALQUIER evento (Started o Finished).
+                    // Si ya cargamos una URL real, about:blank = window.close() del callback.
+                    if nav_url.starts_with("about:") || nav_url.is_empty() {
+                        if real_loaded_page.load(Ordering::Relaxed) {
+                            let label = popup_label_clone.clone();
+                            let app = app_for_close.clone();
+                            std::thread::spawn(move || {
+                                if let Some(w) = app.get_webview_window(&label) {
+                                    let _ = w.close();
+                                }
+                            });
+                        }
+                        return;
+                    }
+                    if payload.event() == PageLoadEvent::Finished {
+                        // Marcar que se cargó una URL real
+                        real_loaded_page.store(true, Ordering::Relaxed);
+                        // Detectar patrones de callback OAuth comunes (cierre con delay)
+                        let is_callback = nav_url.contains("?code=")
+                            || nav_url.contains("#access_token")
+                            || nav_url.contains("oauth_token")
+                            || nav_url.contains("auth/callback")
+                            || nav_url.contains("_oauth/callback");
+                        if is_callback {
+                            let label_to_close = popup_label_clone.clone();
+                            let app_to_close = app_for_close.clone();
+                            std::thread::spawn(move || {
+                                // Delay para que el sitio procese el token antes de cerrar
+                                std::thread::sleep(std::time::Duration::from_millis(800));
+                                if let Some(w) = app_to_close.get_webview_window(&label_to_close) {
+                                    let _ = w.close();
+                                }
+                            });
+                        }
+                    }
+                });
+                if let Err(e) = builder.build() {
+                    eprintln!("[Stride] Error creando popup OAuth: {e}");
+                }
+            }
             NewWindowResponse::Deny
         })
         // FIX 6: Emitir evento al frontend cuando el usuario navega dentro del panel
@@ -215,7 +361,20 @@ pub async fn create_panel_webview<R: Runtime>(
                 }
             }
         })
+        // Inyectar listener en TODOS los paneles para recibir mensajes reenviados desde popups OAuth
+        .initialization_script(PANEL_OAUTH_INIT)
         .auto_resize();
+
+    // Inyectar script de Modo Focus si está activo.
+    // Se incluye DESPUÉS de PANEL_OAUTH_INIT para no interferir.
+    // El script embebe el listado actual de dominios como JSON — nuevos WebViews
+    // siempre reciben las reglas más recientes disponibles en ese momento.
+    if crate::filters::FOCUS_MODE_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+        let focus_script = crate::filters::build_focus_script();
+        if !focus_script.is_empty() {
+            webview_builder = webview_builder.initialization_script(&focus_script);
+        }
+    }
 
     // Para paneles de WhatsApp Web: inyectar botón flotante para toggle de sidebar.
     // initialization_script se registra a nivel WebView2 y se ejecuta automáticamente
@@ -399,6 +558,38 @@ pub async fn navigate_panel_webview<R: Runtime>(
         }
     }
     Ok(())
+}
+
+/// Cerrar un popup OAuth por label. Llamado desde el script POPUP_OAUTH_INIT via window.close().
+/// Necesario porque WebView2 no cierra ventanas Tauri cuando el script llama window.close()
+/// en ventanas que no fueron abiertas por window.open() (sin opener relationship).
+#[tauri::command]
+pub async fn close_stride_popup<R: Runtime>(
+    app: AppHandle<R>,
+    label: String,
+) -> Result<(), String> {
+    if let Some(w) = app.get_webview_window(&label) {
+        w.close().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Reenviar un mensaje de window.opener.postMessage desde un popup OAuth a todos los paneles.
+/// Los paneles tienen PANEL_OAUTH_INIT inyectado que escucha este evento y lo despacha
+/// como MessageEvent, completando el flujo OAuth basado en postMessage.
+#[tauri::command]
+pub async fn forward_opener_message<R: Runtime>(
+    app: AppHandle<R>,
+    message: String,
+    origin: String,
+) -> Result<(), String> {
+    #[derive(Clone, Serialize)]
+    struct OpenerMsg {
+        message: String,
+        origin: String,
+    }
+    app.emit("stride:opener-message", OpenerMsg { message, origin })
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

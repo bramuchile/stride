@@ -1,4 +1,5 @@
 mod commands;
+mod filters;
 
 use commands::permissions::{self, PermissionCache};
 use commands::webview::WebviewRegistry;
@@ -17,13 +18,22 @@ pub fn run() {
             }
             let db_path = data_dir.join("stride.db");
 
-            // Abrir BD de permisos — si falla, continuar con cache en memoria vacío
+            // Abrir BD de permisos — si falla, continuar con cache en memoria vacío.
+            // Aprovechar la misma conexión para leer el estado de Modo Focus antes de que
+            // TypeScript inicialice plugin-sql (evita race con create_panel_webview).
+            let mut focus_enabled_from_db: Option<bool> = None;
             let cache = match rusqlite::Connection::open(&db_path) {
                 Ok(conn) => {
                     if let Err(e) = permissions::init_db(&conn) {
                         eprintln!("[Stride] No se pudo crear tabla permission_grants: {e}");
                     }
                     let map = permissions::load_all(&conn);
+                    // Leer estado de Modo Focus — settings puede no existir en primer arranque
+                    focus_enabled_from_db = conn.query_row(
+                        "SELECT value FROM settings WHERE key = 'focus_mode_enabled'",
+                        [],
+                        |row| row.get::<_, String>(0),
+                    ).ok().map(|v| v == "1");
                     PermissionCache {
                         map:  Arc::new(Mutex::new(map)),
                         conn: Arc::new(Mutex::new(conn)),
@@ -41,6 +51,26 @@ pub fn run() {
                 }
             };
             app.manage(cache);
+
+            // Aplicar estado de Modo Focus (default: true si no hay registro en DB)
+            let focus_enabled = focus_enabled_from_db.unwrap_or(true);
+            filters::FOCUS_MODE_ENABLED.store(focus_enabled, std::sync::atomic::Ordering::Relaxed);
+
+            // Inicializar FilterEngine (EasyList bundled o AppData si existe)
+            filters::init(app.handle());
+
+            // Actualizar EasyList en background al arrancar (sin bloquear UI)
+            // y luego repetir cada 7 días
+            let app_bg = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Primer intento inmediato (no bloquea el arranque)
+                filters::download_and_update(app_bg.clone()).await;
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_secs(7 * 24 * 3600)).await;
+                    filters::download_and_update(app_bg.clone()).await;
+                }
+            });
+
             Ok(())
         })
         .manage(WebviewRegistry(Mutex::new(HashMap::new())))
@@ -57,6 +87,10 @@ pub fn run() {
             commands::webview::show_panel_webviews,
             commands::webview::navigate_panel_webview,
             commands::permissions::reset_permissions,
+            commands::webview::forward_opener_message,
+            commands::webview::close_stride_popup,
+            commands::focus::set_focus_mode,
+            commands::focus::get_focus_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stride");
