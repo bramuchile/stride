@@ -1,4 +1,9 @@
 (function () {
+  // Guard: si somos un popup OAuth (WebView2 comparte environment con los paneles,
+  // por lo que initialization_scripts se propagan a todos los WebViews del mismo
+  // UserDataFolder). Salir antes de instalar cualquier override.
+  if (window.__STRIDE_IS_POPUP__) return;
+
   // ── Estado ─────────────────────────────────────────────────────────────────
   // Arranca en true — el script solo se inyecta cuando Focus Mode está activo.
   // El toggle dinámico actualiza esta variable; fetch/XHR/appendChild la leen en runtime.
@@ -315,7 +320,9 @@
       '[class*="advertisement"]',
       '[id*="advertisement"]',
     ].join(",") + "{ display:none !important }";
-    (document.head || document.documentElement).appendChild(s);
+    var target = document.head || document.documentElement;
+    if (!target) return; // guard: about:blank sin DOM todavía
+    target.appendChild(s);
   }
 
   injectCSS();

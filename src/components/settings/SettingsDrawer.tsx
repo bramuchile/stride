@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { createPortal } from "react-dom";
 import { X, RotateCcw, Github, Info, Database, Palette, AlertTriangle } from "lucide-react";
 import { getDb } from "@/lib/db";
@@ -85,10 +86,15 @@ export function SettingsDrawer({ open, onClose }: Props) {
   const [resetStep, setResetStep] = useState<"idle" | "confirm" | "loading">("idle");
   // mounted se activa solo cuando open=true por primera vez — evita render en el DOM al arrancar
   const [mounted, setMounted] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("...");
 
   useEffect(() => {
     if (open) setMounted(true);
   }, [open]);
+
+  useEffect(() => {
+    getVersion().then(setAppVersion);
+  }, []);
 
   function handleClose() {
     setResetStep("idle");
@@ -347,7 +353,7 @@ export function SettingsDrawer({ open, onClose }: Props) {
                 Versión
               </span>
               <span style={{ fontSize: 10, color: "var(--text3)", fontFamily: "'Geist Mono', monospace" }}>
-                0.1.0-alpha
+                {appVersion}
               </span>
             </div>
             <div style={{

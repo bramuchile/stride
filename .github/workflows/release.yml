@@ -53,3 +53,5 @@ jobs:
             Ver commits para el detalle completo.
           releaseDraft: true
           prerelease: false
+          createUpdaterArtifacts: true
+          

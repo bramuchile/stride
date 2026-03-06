@@ -87,8 +87,6 @@ pub fn run() {
             commands::webview::show_panel_webviews,
             commands::webview::navigate_panel_webview,
             commands::permissions::reset_permissions,
-            commands::webview::forward_opener_message,
-            commands::webview::close_stride_popup,
             commands::focus::set_focus_mode,
             commands::focus::get_focus_mode,
         ])
