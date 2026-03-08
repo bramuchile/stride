@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
+    body { font-family: 'Instrument Sans', system-ui, sans-serif; }
+    #tip {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: #242133;
+      border: 1px solid #3D3952;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #EDE9FE;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #tip.visible { display: flex; }
+    .hint { font-size: 10px; opacity: 0.6; }
+  </style>
+</head>
+<body>
+  <div id="tip">
+    <span id="label"></span>
+    <span id="hint" class="hint"></span>
+  </div>
+</body>
+</html>

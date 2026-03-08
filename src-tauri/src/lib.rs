@@ -71,6 +71,24 @@ pub fn run() {
                 }
             });
 
+            // Ventana overlay para tooltips del sidebar.
+            // always_on_top la sitúa sobre las ventanas hijas WebView2 (que de otro modo
+            // tapan cualquier contenido web del padre, ignorando el z-index CSS).
+            let _ = tauri::WebviewWindowBuilder::new(
+                app,
+                "tooltip-overlay",
+                tauri::WebviewUrl::App("tooltip.html".into()),
+            )
+            .title("")
+            .inner_size(280.0, 30.0)
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .resizable(false)
+            .visible(false)
+            .build();
+
             Ok(())
         })
         .manage(WebviewRegistry(Mutex::new(HashMap::new())))
@@ -89,6 +107,8 @@ pub fn run() {
             commands::permissions::reset_permissions,
             commands::focus::set_focus_mode,
             commands::focus::get_focus_mode,
+            commands::tooltip::show_tooltip,
+            commands::tooltip::hide_tooltip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stride");
