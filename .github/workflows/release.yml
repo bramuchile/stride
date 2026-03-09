@@ -53,5 +53,6 @@ jobs:
             Ver commits para el detalle completo.
           releaseDraft: false
           prerelease: false
-          createUpdaterArtifacts: true
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
           
