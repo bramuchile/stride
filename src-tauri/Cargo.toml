@@ -1,6 +1,6 @@
 [package]
 name = "stride"
-version = "0.2.6"
+version = "0.2.7"
 description = "Stride — centro de control de productividad"
 authors = ["you"]
 edition = "2021"
