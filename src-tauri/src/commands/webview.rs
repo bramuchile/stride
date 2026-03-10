@@ -436,6 +436,36 @@ pub async fn navigate_panel_webview<R: Runtime>(
 }
 
 
+#[tauri::command]
+pub async fn go_back_panel_webview<R: Runtime>(
+    app: AppHandle<R>,
+    panel_id: String,
+) -> Result<(), String> {
+    let registry = app.state::<WebviewRegistry>();
+    let label = registry.0.lock().unwrap().get(&panel_id).cloned();
+    if let Some(label) = label {
+        if let Some(webview) = app.get_webview(&label) {
+            webview.eval("history.back()").map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn go_forward_panel_webview<R: Runtime>(
+    app: AppHandle<R>,
+    panel_id: String,
+) -> Result<(), String> {
+    let registry = app.state::<WebviewRegistry>();
+    let label = registry.0.lock().unwrap().get(&panel_id).cloned();
+    if let Some(label) = label {
+        if let Some(webview) = app.get_webview(&label) {
+            webview.eval("history.forward()").map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

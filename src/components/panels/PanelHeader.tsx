@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { RotateCcw, Search, LayoutPanelLeft } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ChevronLeft, ChevronRight, RotateCcw, Search, LayoutPanelLeft } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { AddressBar } from "./AddressBar";
 import { useUpdatePanel } from "@/hooks/usePanels";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
@@ -44,15 +45,46 @@ export function PanelHeader({ panel }: Props) {
   const [showAddressBar, setShowAddressBar] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(panel.url ?? "");
   const [faviconError, setFaviconError] = useState(false);
+  const [history, setHistory] = useState<string[]>(panel.url ? [panel.url] : []);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  const pendingNav = useRef<"back" | "forward" | null>(null);
   const updatePanel = useUpdatePanel();
   const { setWebviewUrl } = useWorkspaceStore();
+
+  const canGoBack = historyIndex > 0;
+  const canGoForward = historyIndex < history.length - 1;
 
   const faviconUrl = getFaviconUrl(currentUrl);
   const domain = getDomain(currentUrl);
   const siteTitle = getSiteTitle(currentUrl);
   const firstLetter = domain.charAt(0).toUpperCase();
 
+  // Escuchar navegaciones del WebView y actualizar URL + historial
+  useEffect(() => {
+    const unlisten = listen<{ panel_id: string; url: string }>("panel-navigated", (event) => {
+      if (event.payload.panel_id !== panel.id) return;
+      const newUrl = event.payload.url;
+
+      if (pendingNav.current === "back") {
+        pendingNav.current = null;
+        setHistoryIndex((i) => i - 1);
+      } else if (pendingNav.current === "forward") {
+        pendingNav.current = null;
+        setHistoryIndex((i) => i + 1);
+      } else {
+        setHistory((h) => [...h.slice(0, historyIndex + 1), newUrl]);
+        setHistoryIndex((i) => i + 1);
+      }
+
+      setCurrentUrl(newUrl);
+      setFaviconError(false);
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [panel.id, historyIndex]);
+
   const handleNavigate = async (newUrl: string) => {
+    setHistory((h) => [...h.slice(0, historyIndex + 1), newUrl]);
+    setHistoryIndex((i) => i + 1);
     setCurrentUrl(newUrl);
     setFaviconError(false);
     await invoke("navigate_panel_webview", {
@@ -68,6 +100,18 @@ export function PanelHeader({ panel }: Props) {
       panelId: panel.id,
       url: currentUrl,
     }).catch(console.error);
+  };
+
+  const handleBack = () => {
+    if (!canGoBack) return;
+    pendingNav.current = "back";
+    invoke("go_back_panel_webview", { panelId: panel.id }).catch(console.error);
+  };
+
+  const handleForward = () => {
+    if (!canGoForward) return;
+    pendingNav.current = "forward";
+    invoke("go_forward_panel_webview", { panelId: panel.id }).catch(console.error);
   };
 
   const handleWidgetBtn = () => {
@@ -91,6 +135,62 @@ export function PanelHeader({ panel }: Props) {
         />
       ) : (
         <>
+          {/* Atrás */}
+          <button
+            onClick={handleBack}
+            disabled={!canGoBack}
+            style={{
+              width: 22, height: 22,
+              background: "transparent", border: "none",
+              color: canGoBack ? "var(--text3)" : "var(--border2)",
+              cursor: canGoBack ? "pointer" : "default",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 4, flexShrink: 0,
+            }}
+            title="Atrás"
+            onMouseEnter={(e) => {
+              if (!canGoBack) return;
+              const el = e.currentTarget as HTMLElement;
+              el.style.background = "var(--elevated)";
+              el.style.color = "var(--text2)";
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget as HTMLElement;
+              el.style.background = "transparent";
+              el.style.color = canGoBack ? "var(--text3)" : "var(--border2)";
+            }}
+          >
+            <ChevronLeft size={13} strokeWidth={2} />
+          </button>
+
+          {/* Adelante */}
+          <button
+            onClick={handleForward}
+            disabled={!canGoForward}
+            style={{
+              width: 22, height: 22,
+              background: "transparent", border: "none",
+              color: canGoForward ? "var(--text3)" : "var(--border2)",
+              cursor: canGoForward ? "pointer" : "default",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              borderRadius: 4, flexShrink: 0,
+            }}
+            title="Adelante"
+            onMouseEnter={(e) => {
+              if (!canGoForward) return;
+              const el = e.currentTarget as HTMLElement;
+              el.style.background = "var(--elevated)";
+              el.style.color = "var(--text2)";
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget as HTMLElement;
+              el.style.background = "transparent";
+              el.style.color = canGoForward ? "var(--text3)" : "var(--border2)";
+            }}
+          >
+            <ChevronRight size={13} strokeWidth={2} />
+          </button>
+
           {/* Favicon */}
           <div
             className="flex-shrink-0 flex items-center justify-center rounded"
