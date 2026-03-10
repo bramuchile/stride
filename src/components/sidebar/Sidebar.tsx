@@ -1,9 +1,11 @@
-import { Settings } from "lucide-react";
+import { Settings, User } from "lucide-react";
+import { useRef, useState, useEffect } from "react";
 import strideIcon from "@/assets/stride-icon.svg";
 import { WorkspaceList } from "./WorkspaceList";
 import { FocusModeButton } from "./FocusModeButton";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useSidebarTooltip } from "@/hooks/useSidebarTooltip";
+import { useGoogleAccount } from "@/hooks/useGoogleAccount";
 import type { Workspace } from "@/types";
 
 interface Props {
@@ -94,30 +96,148 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
 }
 
 function ProfileButton() {
-  const { showTooltip, hideTooltip } = useSidebarTooltip("Perfil", "Fase 2");
+  const { account, connecting, connect, disconnect } = useGoogleAccount();
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  const tooltipLabel = connecting
+    ? "Conectando..."
+    : account
+    ? account.name
+    : "Conectar cuenta de Google";
+  const { showTooltip, hideTooltip } = useSidebarTooltip(tooltipLabel);
+
+  // Cerrar popover al click fuera
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target as Node)
+      ) {
+        setPopoverOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [popoverOpen]);
+
+  const handleClick = () => {
+    if (connecting) return;
+    if (account) {
+      setPopoverOpen((v) => !v);
+    } else {
+      void connect();
+    }
+  };
+
   return (
-    <button
-      className="flex items-center justify-center rounded-full font-semibold transition-all mt-[2px]"
-      style={{
-        width: "28px", height: "28px",
-        background: "linear-gradient(135deg, var(--accent), #C084FC)",
-        color: "#fff", fontSize: "10px",
-        border: "none", cursor: "pointer",
-        boxShadow: "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)",
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          "0 0 0 2px var(--base-deep), 0 0 0 3px var(--accent)";
-        showTooltip(e);
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow =
-          "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)";
-        hideTooltip();
-      }}
-    >
-      C
-    </button>
+    <div style={{ position: "relative" }}>
+      <button
+        ref={buttonRef}
+        className="flex items-center justify-center rounded-full transition-all mt-[2px]"
+        disabled={connecting}
+        onClick={handleClick}
+        style={{
+          width: "28px", height: "28px",
+          background: account
+            ? "transparent"
+            : "linear-gradient(135deg, var(--accent), #C084FC)",
+          border: "none",
+          cursor: connecting ? "wait" : "pointer",
+          opacity: connecting ? 0.6 : 1,
+          padding: 0,
+          overflow: "hidden",
+          boxShadow: "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)",
+          flexShrink: 0,
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.boxShadow =
+            "0 0 0 2px var(--base-deep), 0 0 0 3px var(--accent)";
+          showTooltip(e);
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.boxShadow =
+            "0 0 0 2px var(--base-deep), 0 0 0 3px var(--border2)";
+          hideTooltip();
+        }}
+      >
+        {account ? (
+          <img
+            src={account.picture_url}
+            referrerPolicy="no-referrer"
+            style={{ width: "28px", height: "28px", objectFit: "cover" }}
+          />
+        ) : (
+          <User size={14} color="#fff" />
+        )}
+      </button>
+
+      {popoverOpen && account && (
+        <div
+          ref={popoverRef}
+          style={{
+            position: "absolute",
+            left: "52px",
+            bottom: "0",
+            background: "var(--elevated)",
+            border: "1px solid var(--border2)",
+            borderRadius: "12px",
+            padding: "12px",
+            minWidth: "200px",
+            zIndex: 1000,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <img
+              src={account.picture_url}
+              referrerPolicy="no-referrer"
+              style={{
+                width: "40px", height: "40px",
+                borderRadius: "50%", objectFit: "cover", flexShrink: 0,
+              }}
+            />
+            <div style={{ overflow: "hidden" }}>
+              <div
+                className="text-sm font-medium truncate"
+                style={{ color: "var(--text)" }}
+              >
+                {account.name}
+              </div>
+              <div
+                className="text-xs truncate"
+                style={{ color: "var(--text3)" }}
+              >
+                {account.email}
+              </div>
+            </div>
+          </div>
+          <hr style={{ border: "none", borderTop: "1px solid var(--border)", margin: "8px 0" }} />
+          <button
+            onClick={() => { void disconnect(); setPopoverOpen(false); }}
+            className="w-full text-sm text-left px-2 py-1 rounded transition-colors"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#f87171",
+              cursor: "pointer",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "var(--base-deep)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = "transparent";
+            }}
+          >
+            Desconectar
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

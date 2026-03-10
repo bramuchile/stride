@@ -32,3 +32,6 @@ CLAUDE.md
 *.pem
 src-tauri/signing/
 local/.tauri/
+
+# Secretos locales — NUNCA subir al repo
+src-tauri/.env

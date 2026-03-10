@@ -1,6 +1,6 @@
 [package]
 name = "stride"
-version = "0.2.0"
+version = "0.2.1"
 description = "Stride — centro de control de productividad"
 authors = ["you"]
 edition = "2021"
@@ -25,8 +25,10 @@ serde_json = "1"
 url = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-clipboard-manager = "2"
-reqwest = { version = "0.12", default-features = false, features = ["native-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json"] }
 tokio = { version = "1", features = ["time"] }
+tiny_http = "0.12"
+open = "5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"

@@ -3,6 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Manager, Runtime, Webview};
 
+use crate::google_auth::GoogleProfile;
+
 // ── Estado gestionado por Tauri ───────────────────────────────────────────────
 
 /// Cache en memoria de decisiones de permisos.
@@ -25,8 +27,72 @@ pub fn init_db(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             granted    INTEGER NOT NULL,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(origin, permission)
+        );
+        CREATE TABLE IF NOT EXISTS google_account (
+            id           INTEGER PRIMARY KEY DEFAULT 1,
+            name         TEXT NOT NULL,
+            email        TEXT NOT NULL,
+            picture_url  TEXT NOT NULL,
+            access_token TEXT NOT NULL,
+            refresh_token TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
         );",
     )
+}
+
+// ── Google Account: persistencia ─────────────────────────────────────────────
+
+pub struct StoredGoogleAccount {
+    pub name: String,
+    pub email: String,
+    pub picture_url: String,
+    pub refresh_token: String,
+}
+
+pub fn save_google_account(
+    conn: &rusqlite::Connection,
+    profile: &GoogleProfile,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR REPLACE INTO google_account
+            (id, name, email, picture_url, access_token, refresh_token, updated_at)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, datetime('now'))",
+        rusqlite::params![
+            profile.name,
+            profile.email,
+            profile.picture_url,
+            profile.access_token,
+            profile.refresh_token,
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn get_google_account_db(
+    conn: &rusqlite::Connection,
+) -> rusqlite::Result<Option<StoredGoogleAccount>> {
+    let result = conn.query_row(
+        "SELECT name, email, picture_url, refresh_token FROM google_account WHERE id = 1",
+        [],
+        |row| {
+            Ok(StoredGoogleAccount {
+                name:          row.get(0)?,
+                email:         row.get(1)?,
+                picture_url:   row.get(2)?,
+                refresh_token: row.get(3)?,
+            })
+        },
+    );
+    match result {
+        Ok(account)                       => Ok(Some(account)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e)                            => Err(e),
+    }
+}
+
+pub fn delete_google_account(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM google_account WHERE id = 1", [])?;
+    Ok(())
 }
 
 /// Carga todas las decisiones previas de SQLite al cache en memoria.

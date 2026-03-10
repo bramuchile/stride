@@ -1,5 +1,6 @@
 mod commands;
 mod filters;
+mod google_auth;
 
 use commands::permissions::{self, PermissionCache};
 use commands::webview::WebviewRegistry;
@@ -109,6 +110,9 @@ pub fn run() {
             commands::focus::get_focus_mode,
             commands::tooltip::show_tooltip,
             commands::tooltip::hide_tooltip,
+            commands::google_auth::connect_google_account,
+            commands::google_auth::get_google_account,
+            commands::google_auth::disconnect_google_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stride");
