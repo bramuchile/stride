@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Lock, Globe, Search } from "lucide-react";
+import { ArrowRight, Lock, Globe, Search, Star } from "lucide-react";
+import type { Bookmark } from "@/hooks/useBookmarks";
 
 interface Props {
   initialUrl: string;
   onNavigate: (url: string) => void;
   onClose: () => void;
+  bookmarks: Bookmark[];
 }
 
 function resolveInput(raw: string): string {
@@ -28,9 +30,23 @@ function isSearchQuery(input: string): boolean {
 }
 
 // Barra de direcciones flotante estilo Claude Desktop
-export function AddressBar({ initialUrl, onNavigate, onClose }: Props) {
+export function AddressBar({ initialUrl, onNavigate, onClose, bookmarks }: Props) {
   const [value, setValue] = useState(initialUrl);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Filtrar sugerencias según el texto actual
+  const suggestions = (() => {
+    const q = value.trim().toLowerCase();
+    if (!q) return bookmarks.slice(0, 6);
+    return bookmarks
+      .filter(
+        (b) =>
+          b.title.toLowerCase().includes(q) ||
+          b.url.toLowerCase().includes(q)
+      )
+      .slice(0, 6);
+  })();
 
   // Foco automático al abrir
   useEffect(() => {
@@ -38,7 +54,7 @@ export function AddressBar({ initialUrl, onNavigate, onClose }: Props) {
     inputRef.current?.select();
   }, []);
 
-  // Cerrar con Escape, navegar con Enter
+  // Cerrar con Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -76,9 +92,25 @@ export function AddressBar({ initialUrl, onNavigate, onClose }: Props) {
           ref={inputRef}
           type="text"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setSelectedIndex(-1);
+          }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") handleSubmit();
+            if (e.key === "Enter") {
+              if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
+                onNavigate(suggestions[selectedIndex].url);
+                onClose();
+              } else {
+                handleSubmit();
+              }
+            } else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setSelectedIndex((i) => Math.min(i + 1, suggestions.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setSelectedIndex((i) => Math.max(i - 1, -1));
+            }
           }}
           className="flex-1 bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 outline-none min-w-0"
           placeholder="https://"
@@ -98,6 +130,88 @@ export function AddressBar({ initialUrl, onNavigate, onClose }: Props) {
       <span className="ml-2 flex-shrink-0 text-[10px] text-zinc-600 font-mono">
         Esc
       </span>
+
+      {/* Panel de sugerencias */}
+      {suggestions.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            right: 0,
+            marginTop: 4,
+            background: "var(--elevated)",
+            border: "1px solid var(--border2)",
+            borderRadius: 8,
+            overflow: "hidden",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+            zIndex: 100,
+          }}
+        >
+          {suggestions.map((b, i) => (
+            <button
+              key={b.id}
+              onClick={() => {
+                onNavigate(b.url);
+                onClose();
+              }}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "6px 10px",
+                background: i === selectedIndex ? "var(--accent-dim)" : "transparent",
+                border: "none",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+              onMouseEnter={() => setSelectedIndex(i)}
+              onMouseLeave={() => setSelectedIndex(-1)}
+            >
+              {b.favicon_url ? (
+                <img
+                  src={b.favicon_url}
+                  width={14}
+                  height={14}
+                  style={{ borderRadius: 3, flexShrink: 0 }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <div style={{ width: 14, height: 14, flexShrink: 0 }} />
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--text)",
+                    fontWeight: 500,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {b.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--text3)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {b.url}
+                </div>
+              </div>
+              <Star size={10} color="var(--accent)" fill="var(--accent)" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

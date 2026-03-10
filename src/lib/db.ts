@@ -61,6 +61,16 @@ async function runMigrations(db: Database): Promise<void> {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS bookmarks (
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      url         TEXT NOT NULL UNIQUE,
+      favicon_url TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // Migraciones aditivas — seguras de re-ejecutar
   const migrations = [
     `ALTER TABLE workspaces ADD COLUMN icon TEXT NOT NULL DEFAULT '📁'`,
