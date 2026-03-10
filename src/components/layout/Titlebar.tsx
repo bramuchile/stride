@@ -1,4 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 import { getPendingUpdate } from "@/features/updater/useUpdater";
@@ -36,8 +37,10 @@ export function Titlebar() {
     const update = getPendingUpdate();
     if (!update) return;
     setInstalling(true);
-    try { await update.downloadAndInstall(); }
-    catch { setInstalling(false); }
+    try {
+      await update.downloadAndInstall();
+      await relaunch();
+    } catch { setInstalling(false); }
   };
 
   return (

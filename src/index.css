@@ -60,6 +60,12 @@
   --radius-lg: 8px;
 }
 
+/* ── ANIMATIONS ── */
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* ── BASE ── */
 html { color-scheme: dark; }
 

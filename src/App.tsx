@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
+import { DownloadToast } from "@/components/DownloadToast";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useUpdater } from "@/features/updater/useUpdater";
@@ -33,7 +34,12 @@ function AppInner() {
   }, []);
 
   if (!dbReady) return null;
-  return <AppShell />;
+  return (
+    <>
+      <AppShell />
+      <DownloadToast />
+    </>
+  );
 }
 
 export default function App() {

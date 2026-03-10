@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBuilder, WebviewUrl, Window};
-use tauri::webview::{NewWindowResponse, PageLoadEvent};
+use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::permissions;
@@ -169,6 +169,7 @@ pub async fn create_panel_webview<R: Runtime>(
 
     let panel_id_for_nav = panel_id.clone();
     let app_for_opener = app.clone();
+    let app_for_download = app.clone();
     let whatsapp_toggle_script = if is_whatsapp {
         Some(include_str!("./whatsapp_sidebar_toggle.js"))
     } else {
@@ -239,6 +240,33 @@ pub async fn create_panel_webview<R: Runtime>(
             }
         })
         // Inyectar listener en TODOS los paneles para recibir mensajes reenviados desde popups OAuth
+        .on_download(move |_webview, event| {
+            match event {
+                DownloadEvent::Requested { destination, .. } => {
+                    let filename = destination
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("archivo")
+                        .to_string();
+                    let _ = app_for_download.emit("download-started", &filename);
+                    true // permitir la descarga
+                }
+                DownloadEvent::Finished { path, success, .. } => {
+                    let filename = path
+                        .as_ref()
+                        .and_then(|p| p.file_name())
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("archivo")
+                        .to_string();
+                    let _ = app_for_download.emit(
+                        "download-finished",
+                        serde_json::json!({ "filename": filename, "success": success }),
+                    );
+                    true
+                }
+                _ => true,
+            }
+        })
         .auto_resize();
 
     // Inyectar script de Modo Focus si está activo.
