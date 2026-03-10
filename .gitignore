@@ -29,6 +29,7 @@ CLAUDE.md
 
 # Tauri signing keys — NUNCA subir al repo
 *.key
+*.key.pub
 *.pem
 src-tauri/signing/
 local/.tauri/

@@ -31,7 +31,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQwMkVBQkU1RUE3OEJENDcKUldSSHZYanE1YXN1MEMyejZJYWFKRzJJMjRnczhIbkEyNm9wNjhKVnl1clFTR0FZcmovOTJVS3YK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxRjJGMDI0QUE5OTEyQTkKUldTcEVwbXFKUER5Y2RmWHZTbkxFZjVOOVIyMmRtL0lRNDhhUTEyVWxUZjQ5Slh4T2VzMFJrOUkK",
       "endpoints": [
         "https://github.com/bramuchile/stride/releases/latest/download/latest.json"
       ],
