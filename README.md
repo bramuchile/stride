@@ -6,7 +6,7 @@
 Open Gmail, Calendar, GitHub, and your daily apps side-by-side — no tabs, no browser clutter.
 
 
-[![Version](https://img.shields.io/badge/version-0.2.8-7C6AF7?style=flat-square)](https://github.com/bramuchile/stride/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-7C6AF7?style=flat-square)](https://github.com/bramuchile/stride/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?style=flat-square&logo=windows)](https://github.com/bramuchile/stride/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![Built with Tauri](https://img.shields.io/badge/built_with-Tauri_2-FFC131?style=flat-square&logo=tauri)](https://tauri.app)
@@ -32,8 +32,8 @@ Pre-built installers are available on the [Releases page](https://github.com/bra
 
 | Installer | Format |
 |-----------|--------|
-| [`Stride_0.2.8_x64-setup.exe`](https://github.com/bramuchile/stride/releases/download/v0.2.8/Stride_0.2.8_x64-setup.exe) | NSIS installer |
-| [`Stride_0.2.8_x64.msi`](https://github.com/bramuchile/stride/releases/download/v0.2.8/Stride_0.2.8_x64_en-US.msi) | MSI package |
+| [`Stride_0.3.0_x64-setup.exe`](https://github.com/bramuchile/stride/releases/download/v0.3.0/Stride_0.3.0_x64-setup.exe) | NSIS installer |
+| [`Stride_0.3.0_x64.msi`](https://github.com/bramuchile/stride/releases/download/v0.3.0/Stride_0.3.0_x64_en-US.msi) | MSI package |
 
 **Requirements:** Windows 10/11 (x64). [WebView2 runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) is bundled with the installer.
 
