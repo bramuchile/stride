@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { check } from "@tauri-apps/plugin-updater";
 import type { Update } from "@tauri-apps/plugin-updater";
 
-// Singleton para poder instalar desde el banner de Titlebar sin prop drilling
-let _pendingUpdate: Update | null = null;
-export const getPendingUpdate = () => _pendingUpdate;
+declare global {
+  interface WindowEventMap {
+    "stride:update-available": CustomEvent<{ version: string; update: Update }>;
+  }
+}
 
 export function useUpdater() {
   useEffect(() => {
@@ -15,9 +17,8 @@ export function useUpdater() {
         const update = await check();
         if (update?.available) {
           console.info(`Update available: ${update.version}`);
-          _pendingUpdate = update;
           window.dispatchEvent(
-            new CustomEvent("stride:update-available", { detail: { version: update.version } })
+            new CustomEvent("stride:update-available", { detail: { version: update.version, update } })
           );
         }
       } catch {

@@ -1,8 +1,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { relaunch } from "@tauri-apps/plugin-process";
+import type { Update } from "@tauri-apps/plugin-updater";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
-import { getPendingUpdate } from "@/features/updater/useUpdater";
+import { formatError } from "@/hooks/useErrorHandler";
+import type { AppError } from "@/types";
+import { ErrorDisplay } from "@/components/error/ErrorDisplay";
 import { useState, useEffect } from "react";
 import strideIcon from "@/assets/stride-icon.svg";
 
@@ -14,7 +17,9 @@ export function Titlebar() {
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
   const [isMaximized, setIsMaximized] = useState(false);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<AppError | null>(null);
 
   useEffect(() => {
     win.isMaximized().then(setIsMaximized);
@@ -25,22 +30,27 @@ export function Titlebar() {
   }, []);
 
   useEffect(() => {
-    const handler = (e: Event) => {
-      const { version } = (e as CustomEvent<{ version: string }>).detail;
-      setUpdateVersion(version);
+    const handler = (e: WindowEventMap["stride:update-available"]) => {
+      setPendingUpdate(e.detail.update);
+      setUpdateVersion(e.detail.version);
     };
     window.addEventListener("stride:update-available", handler);
     return () => window.removeEventListener("stride:update-available", handler);
   }, []);
 
   const handleInstall = async () => {
-    const update = getPendingUpdate();
-    if (!update) return;
+    if (!pendingUpdate) {
+      setInstallError(await formatError(new Error("No hay actualización pendiente"), "handleInstall"));
+      return;
+    }
     setInstalling(true);
     try {
-      await update.downloadAndInstall();
+      await pendingUpdate.downloadAndInstall();
       await relaunch();
-    } catch { setInstalling(false); }
+    } catch (e) {
+      setInstallError(await formatError(e, "downloadAndInstall"));
+      setInstalling(false);
+    }
   };
 
   return (
@@ -126,6 +136,9 @@ export function Titlebar() {
           }}>
             {installing ? "..." : "Instalar"}
           </button>
+          {installError && (
+            <ErrorDisplay error={installError} onRetry={() => setInstallError(null)} />
+          )}
         </div>
       )}
 
