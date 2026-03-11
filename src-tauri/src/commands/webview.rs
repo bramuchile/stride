@@ -414,6 +414,36 @@ pub async fn resize_panel_webviews<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn hide_panel_webview<R: Runtime>(
+    app: AppHandle<R>,
+    panel_id: String,
+) -> Result<(), String> {
+    let registry = app.state::<WebviewRegistry>();
+    let label = registry.0.lock().unwrap().get(&panel_id).cloned();
+    if let Some(label) = label {
+        if let Some(wv) = app.get_webview(&label) {
+            let _ = wv.hide();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn show_panel_webview<R: Runtime>(
+    app: AppHandle<R>,
+    panel_id: String,
+) -> Result<(), String> {
+    let registry = app.state::<WebviewRegistry>();
+    let label = registry.0.lock().unwrap().get(&panel_id).cloned();
+    if let Some(label) = label {
+        if let Some(wv) = app.get_webview(&label) {
+            let _ = wv.show();
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn hide_all_panel_webviews<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let registry = app.state::<WebviewRegistry>();
     let labels: Vec<String> = registry.0.lock().unwrap().values().cloned().collect();

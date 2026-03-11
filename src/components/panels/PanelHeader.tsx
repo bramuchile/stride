@@ -143,6 +143,19 @@ export function PanelHeader({ panel }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [showBookmarkPopup]);
 
+  // Ocultar/mostrar el WebView del panel cuando hay un overlay flotante.
+  // WebView2 es una ventana nativa y siempre se renderiza encima del HTML,
+  // ignorando z-index. Solución: hide() mientras el overlay esté abierto.
+  const isOverlayOpen = showBookmarkPopup || showAddressBar;
+  useEffect(() => {
+    const panelId = panel.id;
+    if (isOverlayOpen) {
+      invoke("hide_panel_webview", { panelId }).catch(console.error);
+    } else {
+      invoke("show_panel_webview", { panelId }).catch(console.error);
+    }
+  }, [isOverlayOpen, panel.id]);
+
   const handleStarClick = () => {
     const bm = getBookmark(currentUrl);
     setBookmarkTitle(bm?.title ?? siteTitle);

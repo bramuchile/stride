@@ -103,6 +103,8 @@ pub fn run() {
             commands::webview::create_panel_webview,
             commands::webview::destroy_panel_webview,
             commands::webview::resize_panel_webviews,
+            commands::webview::hide_panel_webview,
+            commands::webview::show_panel_webview,
             commands::webview::hide_all_panel_webviews,
             commands::webview::show_panel_webviews,
             commands::webview::navigate_panel_webview,

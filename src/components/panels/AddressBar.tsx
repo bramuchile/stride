@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Lock, Globe, Search, Star } from "lucide-react";
+import { ArrowRight, Lock, Globe, Search, Star, X } from "lucide-react";
 import type { Bookmark } from "@/hooks/useBookmarks";
 
 interface Props {
@@ -126,10 +126,14 @@ export function AddressBar({ initialUrl, onNavigate, onClose, bookmarks }: Props
         </button>
       </div>
 
-      {/* Hint Escape */}
-      <span className="ml-2 flex-shrink-0 text-[10px] text-zinc-600 font-mono">
-        Esc
-      </span>
+      {/* Botón cerrar */}
+      <button
+        onClick={onClose}
+        className="ml-2 flex-shrink-0 flex h-5 w-5 items-center justify-center rounded text-zinc-600 hover:text-zinc-300 hover:bg-zinc-700 transition-colors"
+        title="Cerrar (Esc)"
+      >
+        <X size={12} strokeWidth={2} />
+      </button>
 
       {/* Panel de sugerencias */}
       {suggestions.length > 0 && (
