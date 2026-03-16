@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import type { DynamicLayout } from "@/types";
 
 // Singleton: una sola conexión a la base de datos
 let _db: Database | null = null;
@@ -71,6 +72,14 @@ async function runMigrations(db: Database): Promise<void> {
     )
   `);
 
+  // Estructura de layout dinámico por workspace (JSON)
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS workspace_layouts (
+      workspace_id TEXT PRIMARY KEY,
+      layout_json  TEXT NOT NULL
+    )
+  `);
+
   // Migraciones aditivas — seguras de re-ejecutar
   const migrations = [
     `ALTER TABLE workspaces ADD COLUMN icon TEXT NOT NULL DEFAULT '📁'`,
@@ -88,4 +97,28 @@ async function runMigrations(db: Database): Promise<void> {
       // Columna ya existe — ignorar
     }
   }
+}
+
+// --- Helpers para layout dinámico ---
+
+export async function getDynamicLayout(workspaceId: string): Promise<DynamicLayout | null> {
+  const db = await getDb();
+  const rows = await db.select<{ layout_json: string }[]>(
+    "SELECT layout_json FROM workspace_layouts WHERE workspace_id = $1",
+    [workspaceId]
+  );
+  if (rows.length === 0) return null;
+  try {
+    return JSON.parse(rows[0].layout_json) as DynamicLayout;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDynamicLayout(workspaceId: string, layout: DynamicLayout): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    "INSERT OR REPLACE INTO workspace_layouts (workspace_id, layout_json) VALUES ($1, $2)",
+    [workspaceId, JSON.stringify(layout)]
+  );
 }

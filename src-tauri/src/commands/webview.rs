@@ -12,6 +12,10 @@ pub struct WebviewRegistry(pub Mutex<HashMap<String, String>>);
 // Gap físico entre WebViews nativos adyacentes. El PanelResizer React vive en ese espacio.
 // Debe coincidir con RESIZER_W exportado desde PanelResizer.tsx.
 const RESIZER_WIDTH: f64 = 5.0;
+// Altura del PanelHeader React de cada slot (32px). Debe coincidir con PANEL_BAR_HEIGHT en useWebviews.ts.
+const PANEL_BAR_HEIGHT: f64 = 32.0;
+// Gap CSS entre filas en el grid 2x2 (gap: "1px" en PanelGrid.tsx).
+const ROW_GAP_2X2: f64 = 1.0;
 
 
 #[derive(Clone, Serialize)]
@@ -58,17 +62,24 @@ fn calculate_bounds(
             )
         }
         "2x2" => {
-            // 1 resizer horizontal + 1 resizer vertical
+            // El contenedor CSS tiene altura = window_height - titlebar_height (solo titlebar, sin panel bar).
+            // Las filas se separan con gap CSS de ROW_GAP_2X2 px (no RESIZER_WIDTH).
+            // Cada slot tiene PanelHeader de PANEL_BAR_HEIGHT px; el WebView empieza después.
+            let titlebar_height = header_height - PANEL_BAR_HEIGHT;
+            let css_container_h = window_height - titlebar_height;
+            let cell_height = (css_container_h - ROW_GAP_2X2) / 2.0;
+            let webview_height = (cell_height - PANEL_BAR_HEIGHT).max(0.0);
+
             let col_width = (available_width - RESIZER_WIDTH) / 2.0;
-            let row_height = (available_height - RESIZER_WIDTH) / 2.0;
             let col = position % 2;
             let row = position / 2;
+            let css_cell_top = titlebar_height + row as f64 * (cell_height + ROW_GAP_2X2);
             (
                 LogicalPosition::new(
                     sidebar_width + col as f64 * (col_width + RESIZER_WIDTH),
-                    header_height + row as f64 * (row_height + RESIZER_WIDTH),
+                    css_cell_top + PANEL_BAR_HEIGHT,
                 ),
-                LogicalSize::new(col_width, row_height),
+                LogicalSize::new(col_width, webview_height),
             )
         }
         _ => (
@@ -83,9 +94,8 @@ fn calculate_bounds(
         let overlay_px = if let Some(px) = overlay_height_px {
             px
         } else if let Some(pct) = overlay_height_pct {
-            let row_count = if layout == "2x2" { 2.0 } else { 1.0 };
-            let panel_height = available_height / row_count;
-            panel_height * pct / 100.0
+            // size.height ya contiene la altura correcta del WebView en todos los layouts.
+            size.height * pct / 100.0
         } else {
             0.0
         };
@@ -340,6 +350,10 @@ pub struct PanelLayoutInfo {
     /// Fracciones personalizadas de ancho para paneles redimensionados manualmente (0.0–1.0)
     pub custom_x_frac: Option<f64>,
     pub custom_width_frac: Option<f64>,
+    /// Fracciones de posición vertical para layout dinámico (relativas a available_height).
+    /// custom_x_frac/w relativas al total disponible (incluyendo resizers) cuando layout=="dynamic".
+    pub custom_y_frac: Option<f64>,
+    pub custom_height_frac: Option<f64>,
 }
 
 #[tauri::command]
@@ -364,6 +378,7 @@ pub async fn resize_panel_webviews<R: Runtime>(
 
     // Número de columnas según layout — determina cuántos resizers horizontales hay.
     let col_count: usize = match layout.as_str() {
+        "1col" | "dynamic" => 1, // dynamic usa custom fracs, sin resizers fijos
         "3col" => 3,
         "2x2"  => 2,
         _      => 2, // "2col" y default
@@ -387,19 +402,34 @@ pub async fn resize_panel_webviews<R: Runtime>(
                     panel.overlay_height_pct,
                     panel.overlay_height_px,
                 );
-                // Si el usuario redimensionó el panel arrastrando el divisor,
+                // Si el usuario redimensionó el panel arrastrando el divisor (o layout dinámico),
                 // las fracciones personalizadas sobreescriben el ancho calculado por layout.
-                // x_frac y w_frac son fracciones del espacio sin resizers (como React los envía).
-                // Se agrega el offset de resizers según el índice de columna del panel.
                 if let (Some(x_frac), Some(w_frac)) = (panel.custom_x_frac, panel.custom_width_frac) {
-                    let col_index = match layout.as_str() {
-                        "2x2" => panel.position % 2,
-                        _     => panel.position,
-                    };
-                    pos.x = sidebar_width
-                        + x_frac * available_for_webviews
-                        + col_index as f64 * RESIZER_WIDTH;
-                    size.width = w_frac * available_for_webviews;
+                    if layout == "dynamic" {
+                        // Para layout dinámico: las fracs ya incluyen el offset de resizers,
+                        // son relativas al espacio total disponible (sin sidebar).
+                        let total_avail_x = logical_width - sidebar_width;
+                        pos.x = sidebar_width + x_frac * total_avail_x;
+                        size.width = w_frac * total_avail_x;
+                    } else {
+                        // Para layouts estáticos: x_frac / w_frac son fracciones del espacio
+                        // sin resizers; se agrega el offset de resizadores por columna.
+                        let col_index = match layout.as_str() {
+                            "2x2" => panel.position % 2,
+                            _     => panel.position,
+                        };
+                        pos.x = sidebar_width
+                            + x_frac * available_for_webviews
+                            + col_index as f64 * RESIZER_WIDTH;
+                        size.width = w_frac * available_for_webviews;
+                    }
+                }
+                // Fracs verticales — exclusivo del layout dinámico.
+                // y_frac y h_frac son relativas al available_height total (sin header).
+                if let (Some(y_frac), Some(h_frac)) = (panel.custom_y_frac, panel.custom_height_frac) {
+                    let total_avail_y = logical_height - header_height;
+                    pos.y = header_height + y_frac * total_avail_y;
+                    size.height = h_frac * total_avail_y;
                 }
                 webview
                     .set_bounds(tauri::Rect {
@@ -531,6 +561,16 @@ mod tests {
     // sidebar_width=52, header_height=62 (titlebar 30 + panel_bar 32)
 
     #[test]
+    fn test_bounds_1col() {
+        // 1col: panel ocupa todo el ancho y alto disponible, sin resizers
+        let (pos, size) = calculate_bounds("1col", 0, 1400.0, 900.0, 52.0, 62.0, None, None, None);
+        assert_eq!(pos.x, 52.0);
+        assert_eq!(pos.y, 62.0);
+        assert_eq!(size.width, 1348.0);  // 1400 - 52
+        assert_eq!(size.height, 838.0); // 900 - 62
+    }
+
+    #[test]
     fn test_bounds_2col_left() {
         let (pos, size) = calculate_bounds("2col", 0, 1400.0, 900.0, 52.0, 62.0, None, None, None);
         assert_eq!(pos.x, 52.0);
@@ -551,12 +591,13 @@ mod tests {
     #[test]
     fn test_bounds_2x2_bottom_right() {
         let (pos, size) = calculate_bounds("2x2", 3, 1400.0, 900.0, 52.0, 62.0, None, None, None);
-        // avail_w = 1343 → col = 671.5; avail_h = 838-5 = 833 → row = 416.5
-        // pos=3 → col=1, row=1: x = 52 + 676.5 = 728.5; y = 62 + 421.5 = 483.5
+        // titlebar=30, css_container_h=870, cell_height=(870-1)/2=434.5, webview_h=434.5-32=402.5
+        // col_width=(1348-5)/2=671.5
+        // pos=3 → col=1, row=1: x=52+676.5=728.5; css_cell_top=30+435.5=465.5; y=465.5+32=497.5
         assert!((pos.x - 728.5).abs() < 0.01);
-        assert!((pos.y - 483.5).abs() < 0.01);
+        assert!((pos.y - 497.5).abs() < 0.01);
         assert!((size.width - 671.5).abs() < 0.01);
-        assert!((size.height - 416.5).abs() < 0.01);
+        assert!((size.height - 402.5).abs() < 0.01);
     }
 
     #[test]

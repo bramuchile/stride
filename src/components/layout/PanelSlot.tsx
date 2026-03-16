@@ -7,14 +7,19 @@ import { PanelHeader } from "@/components/panels/PanelHeader";
 import { PanelOverlay, PanelOverlayCollapsedBar } from "@/components/panels/PanelOverlay";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { SIDEBAR_WIDTH, HEADER_HEIGHT } from "@/hooks/useWebviews";
-import type { Panel } from "@/types";
+import type { Panel, PanelType, WidgetId } from "@/types";
 
 interface Props {
   panel: Panel;
   layout: string;
+  // Props para layout dinámico — pasadas desde DynamicPanelGrid → PanelHeader
+  dynamicMode?: boolean;
+  onAddPanelBelow?: (type: PanelType, widgetId?: WidgetId) => void;
+  onAddColumn?: () => void;
+  isLastColumn?: boolean;
 }
 
-export function PanelSlot({ panel, layout }: Props) {
+export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn }: Props) {
   const [overlayCollapsed, setOverlayCollapsed] = useState(false);
   const { webviewMap } = useWorkspaceStore();
 
@@ -75,7 +80,13 @@ export function PanelSlot({ panel, layout }: Props) {
     >
       {panel.type === "WEB" ? (
         <>
-          <PanelHeader panel={panel} />
+          <PanelHeader
+            panel={panel}
+            dynamicMode={dynamicMode}
+            onAddPanelBelow={onAddPanelBelow}
+            onAddColumn={onAddColumn}
+            isLastColumn={isLastColumn}
+          />
 
           {/* Overlay top */}
           {hasOverlay && panel.overlay_position === "top" && (

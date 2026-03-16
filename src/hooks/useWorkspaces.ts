@@ -35,11 +35,11 @@ export function useCreateWorkspace() {
 export function useUpdateWorkspace() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (ws: Pick<Workspace, "id" | "name" | "icon">) => {
+    mutationFn: async (ws: Pick<Workspace, "id" | "name" | "icon" | "layout">) => {
       const db = await getDb();
       await db.execute(
-        "UPDATE workspaces SET name=$1, icon=$2 WHERE id=$3",
-        [ws.name, ws.icon ?? "📁", ws.id]
+        "UPDATE workspaces SET name=$1, icon=$2, layout=$3 WHERE id=$4",
+        [ws.name, ws.icon ?? "📁", ws.layout, ws.id]
       );
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["workspaces"] }),

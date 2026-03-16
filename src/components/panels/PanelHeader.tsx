@@ -6,10 +6,15 @@ import { AddressBar } from "./AddressBar";
 import { useUpdatePanel } from "@/hooks/usePanels";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useBookmarks } from "@/hooks/useBookmarks";
-import type { Panel } from "@/types";
+import type { Panel, PanelType, WidgetId } from "@/types";
 
 interface Props {
   panel: Panel;
+  // Props opcionales para layout dinámico
+  dynamicMode?: boolean;
+  onAddPanelBelow?: (type: PanelType, widgetId?: WidgetId) => void;
+  onAddColumn?: () => void;
+  isLastColumn?: boolean;
 }
 
 function getDomain(url?: string): string {
@@ -42,8 +47,10 @@ function getFaviconUrl(url?: string): string | null {
   }
 }
 
-export function PanelHeader({ panel }: Props) {
+export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn }: Props) {
   const [showAddressBar, setShowAddressBar] = useState(false);
+  const [showSplitPopover, setShowSplitPopover] = useState(false);
+  const splitPopoverRef = useRef<HTMLDivElement>(null);
   const [currentUrl, setCurrentUrl] = useState(panel.url ?? "");
   const [faviconError, setFaviconError] = useState(false);
   const [history, setHistory] = useState<string[]>(panel.url ? [panel.url] : []);
@@ -143,10 +150,27 @@ export function PanelHeader({ panel }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [showBookmarkPopup]);
 
+  // Cerrar popover de split al hacer click fuera o Escape
+  useEffect(() => {
+    if (!showSplitPopover) return;
+    const handleClick = (e: MouseEvent) => {
+      if (splitPopoverRef.current && !splitPopoverRef.current.contains(e.target as Node)) {
+        setShowSplitPopover(false);
+      }
+    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowSplitPopover(false); };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [showSplitPopover]);
+
   // Ocultar/mostrar el WebView del panel cuando hay un overlay flotante.
   // WebView2 es una ventana nativa y siempre se renderiza encima del HTML,
   // ignorando z-index. Solución: hide() mientras el overlay esté abierto.
-  const isOverlayOpen = showBookmarkPopup || showAddressBar;
+  const isOverlayOpen = showBookmarkPopup || showAddressBar || showSplitPopover;
   useEffect(() => {
     const panelId = panel.id;
     if (isOverlayOpen) {
@@ -436,6 +460,133 @@ export function PanelHeader({ panel }: Props) {
                 )}
               </div>
             </div>
+          )}
+
+          {/* Botones de layout dinámico — solo cuando dynamicMode === true */}
+          {dynamicMode && (
+            <>
+              {/* Botón dividir panel (añadir fila debajo) */}
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setShowSplitPopover(v => !v)}
+                  title="Dividir panel"
+                  style={{
+                    width: 22, height: 22,
+                    background: showSplitPopover ? "var(--elevated)" : "transparent",
+                    border: "none",
+                    color: showSplitPopover ? "var(--accent)" : "var(--text3)",
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    borderRadius: 4, flexShrink: 0, transition: "all 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.background = "var(--elevated)";
+                    el.style.color = "var(--accent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.background = showSplitPopover ? "var(--elevated)" : "transparent";
+                    el.style.color = showSplitPopover ? "var(--accent)" : "var(--text3)";
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <rect x="1" y="1" width="11" height="5" rx="1.5"
+                      stroke="currentColor" strokeWidth="1.2"/>
+                    <rect x="1" y="7" width="11" height="5" rx="1.5"
+                      stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                </button>
+                {/* Popover de selección de tipo */}
+                {showSplitPopover && onAddPanelBelow && (
+                  <div
+                    ref={splitPopoverRef}
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      right: 0,
+                      zIndex: 200,
+                      minWidth: 160,
+                      background: "var(--elevated2)",
+                      border: "1px solid var(--border2)",
+                      borderRadius: 10,
+                      boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                      padding: "6px 4px",
+                    }}
+                  >
+                    {([
+                      { type: "WEB" as const, icon: "🌐", label: "Navegador web", highlight: true },
+                      { type: "WIDGET" as const, widgetId: "notes" as WidgetId, icon: "📝", label: "Notas" },
+                      { type: "WIDGET" as const, widgetId: "next-meeting" as WidgetId, icon: "📅", label: "Próxima reunión" },
+                      { type: "WIDGET" as const, widgetId: "scratchpad" as WidgetId, icon: "📝", label: "Notas rápidas" },
+                    ]).map((opt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          onAddPanelBelow(opt.type, "widgetId" in opt ? opt.widgetId : undefined);
+                          setShowSplitPopover(false);
+                        }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "6px 10px", borderRadius: 6,
+                          cursor: "pointer", fontSize: 12,
+                          color: opt.highlight ? "var(--accent)" : "var(--text2)",
+                          background: "transparent", border: "none",
+                          width: "100%", textAlign: "left",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = opt.highlight
+                            ? "rgba(124,106,247,0.08)" : "var(--elevated)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        <span style={{ fontSize: 14 }}>{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Botón añadir columna — solo en la última columna */}
+              {isLastColumn && onAddColumn && (
+                <button
+                  onClick={onAddColumn}
+                  title="Añadir columna"
+                  style={{
+                    width: 22, height: 22,
+                    background: "transparent", border: "none",
+                    color: "var(--text3)", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    borderRadius: 4, flexShrink: 0, transition: "all 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.background = "var(--elevated)";
+                    el.style.color = "var(--accent)";
+                  }}
+                  onMouseLeave={(e) => {
+                    const el = e.currentTarget as HTMLElement;
+                    el.style.background = "transparent";
+                    el.style.color = "var(--text3)";
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                    <rect x="1" y="1" width="6" height="11" rx="1.5"
+                      stroke="currentColor" strokeWidth="1.2"/>
+                    <rect x="9" y="4" width="3" height="5" rx="1"
+                      stroke="currentColor" strokeWidth="1.2"
+                      strokeDasharray="2 1"/>
+                    <line x1="10.5" y1="5.5" x2="10.5" y2="7.5"
+                      stroke="currentColor" strokeWidth="1.2"/>
+                    <line x1="9.5" y1="6.5" x2="11.5" y2="6.5"
+                      stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                </button>
+              )}
+            </>
           )}
 
           {/* Widget btn */}

@@ -1,4 +1,4 @@
-export type LayoutType = "2col" | "3col" | "2x2";
+export type LayoutType = "1col" | "2col" | "3col" | "2x2" | "dynamic";
 export type PanelType = "WEB" | "WIDGET";
 export type WidgetId = "scratchpad" | "next-meeting" | "notes" | "weather";
 
@@ -24,6 +24,24 @@ export interface Panel {
   width_frac?: number | null;
 }
 
+// --- Layout dinámico ---
+
+export interface DynamicPanel {
+  panel_id: string;
+  height_frac: number;
+}
+
+export interface DynamicColumn {
+  width_frac: number;
+  panels: DynamicPanel[];
+}
+
+export interface DynamicLayout {
+  columns: DynamicColumn[];
+}
+
+// --- Panel bounds para Rust ---
+
 export interface PanelLayoutInfo {
   panel_id: string;
   position: number;
@@ -35,6 +53,9 @@ export interface PanelLayoutInfo {
   // Fracciones personalizadas de ancho (0.0–1.0) para paneles redimensionados manualmente
   custom_x_frac?: number | null;
   custom_width_frac?: number | null;
+  // Fracciones de posición vertical para layout dinámico (relativas a available_height)
+  custom_y_frac?: number | null;
+  custom_height_frac?: number | null;
 }
 
 export interface AppError {

@@ -1,20 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { Titlebar } from "./Titlebar";
 import { PanelGrid } from "./PanelGrid";
-import { CreateWorkspaceDialog } from "@/components/workspace/CreateWorkspaceDialog";
-import { EditWorkspaceDialog } from "@/components/workspace/EditWorkspaceDialog";
+import { WorkspaceDialog } from "@/components/workspace/WorkspaceDialog";
 import { SettingsDrawer } from "@/components/settings/SettingsDrawer";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
-import { usePanels } from "@/hooks/usePanels";
+import { usePanels, useCreatePanel } from "@/hooks/usePanels";
 import { useWebviews } from "@/hooks/useWebviews";
-import type { Workspace } from "@/types";
+import { useDynamicLayout } from "@/hooks/useDynamicLayout";
+import { getDb } from "@/lib/db";
+import type { DynamicLayout, PanelType, Workspace, WidgetId } from "@/types";
 
 export function AppShell() {
   const { data: workspaces = [] } = useWorkspaces();
-  const { activeWorkspaceId, setActiveWorkspace, webviewMap } = useWorkspaceStore();
+  const { activeWorkspaceId, setActiveWorkspace, webviewMap, unregisterWebview } = useWorkspaceStore();
   const activeWorkspace = workspaces.find((ws) => ws.id === activeWorkspaceId);
   const { data: panels = [] } = usePanels(activeWorkspaceId);
   const initialized = useRef(false);
@@ -23,6 +25,14 @@ export function AppShell() {
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
   const [editStartAtPanels, setEditStartAtPanels] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Layout dinámico — solo activo cuando el workspace activo tiene layout "dynamic"
+  const isDynamic = activeWorkspace?.layout === "dynamic";
+  const { layout: dynamicLayout, save: saveDynLayout, addColumn, addPanelToColumn, removePanel } = useDynamicLayout(
+    isDynamic ? activeWorkspaceId : null
+  );
+
+  const queryClient = useQueryClient();
 
   // Cuando cualquier diálogo está abierto, ocultar los WebViews nativos para que
   // no queden por encima del diálogo (los WebView2 child windows siempre están
@@ -55,7 +65,12 @@ export function AppShell() {
     }
   }, [workspaces, activeWorkspaceId, setActiveWorkspace]);
 
-  useWebviews(panels, activeWorkspace?.layout ?? "2col", activeWorkspaceId);
+  useWebviews(
+    panels,
+    activeWorkspace?.layout ?? "2col",
+    activeWorkspaceId,
+    isDynamic ? dynamicLayout : null
+  );
 
   function openEditWorkspace(ws: Workspace) {
     setEditingWorkspace(ws);
@@ -77,6 +92,53 @@ export function AppShell() {
     return () => window.removeEventListener("stride:edit-panels", handler);
   });
 
+  const createPanel = useCreatePanel();
+
+  // Callback que usa DynamicPanelGrid vía PanelGrid para añadir un panel en una columna.
+  // Crea el panel en SQLite y actualiza la estructura del layout dinámico.
+  const handleAddPanelToColumn = useCallback(
+    async (colIdx: number, type: PanelType, widgetId?: WidgetId) => {
+      if (!activeWorkspaceId) return;
+      const newPanelId = crypto.randomUUID();
+      const position = panels.length; // posición secuencial sin semántica especial en dynamic
+      await createPanel.mutateAsync({
+        id: newPanelId,
+        workspace_id: activeWorkspaceId,
+        type,
+        url: type === "WEB" ? undefined : undefined,
+        widget_id: type === "WIDGET" && widgetId ? widgetId : undefined,
+        position,
+      });
+      await addPanelToColumn(colIdx, newPanelId);
+    },
+    [activeWorkspaceId, panels.length, createPanel, addPanelToColumn]
+  );
+
+  // Para resize drag en DynamicPanelGrid: actualizar layout inmediatamente (optimista)
+  // y persistir en SQLite.
+  const handleDynamicLayoutChange = useCallback(
+    (layout: DynamicLayout) => {
+      saveDynLayout(layout).catch(console.error);
+    },
+    [saveDynLayout]
+  );
+
+  // Eliminar un panel del layout dinámico: destruir WebView, borrar de SQLite,
+  // actualizar el layout y refrescar la query de paneles.
+  const handleRemovePanel = useCallback(
+    async (panelId: string) => {
+      if (webviewMap[panelId]) {
+        await invoke("destroy_panel_webview", { panelId }).catch(console.error);
+        unregisterWebview(panelId);
+      }
+      const db = await getDb();
+      await db.execute("DELETE FROM panels WHERE id = $1", [panelId]);
+      await removePanel(panelId);
+      queryClient.invalidateQueries({ queryKey: ["panels", activeWorkspaceId] });
+    },
+    [webviewMap, unregisterWebview, removePanel, activeWorkspaceId, queryClient]
+  );
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
       <Titlebar />
@@ -88,10 +150,15 @@ export function AppShell() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <main className="flex-1 overflow-hidden">
-        {activeWorkspace && panels.length > 0 && (
+        {activeWorkspace && (panels.length > 0 || isDynamic) && (
           <PanelGrid
             panels={panels}
             layout={activeWorkspace.layout}
+            dynamicLayout={isDynamic ? dynamicLayout : undefined}
+            onDynamicLayoutChange={isDynamic ? handleDynamicLayoutChange : undefined}
+            onAddPanelToColumn={isDynamic ? handleAddPanelToColumn : undefined}
+            onAddColumn={isDynamic ? addColumn : undefined}
+            onRemovePanel={isDynamic ? handleRemovePanel : undefined}
           />
         )}
         {!activeWorkspace && (
@@ -104,8 +171,12 @@ export function AppShell() {
       </div>
 
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <CreateWorkspaceDialog open={createOpen} onClose={() => setCreateOpen(false)} />
-      <EditWorkspaceDialog
+      <WorkspaceDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+      />
+      <WorkspaceDialog
+        open={editingWorkspace !== null}
         workspace={editingWorkspace}
         startAtPanels={editStartAtPanels}
         onClose={() => setEditingWorkspace(null)}

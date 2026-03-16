@@ -2,9 +2,10 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { invoke } from "@tauri-apps/api/core";
 import { PanelSlot } from "./PanelSlot";
 import { PanelResizer, RESIZER_W } from "@/components/PanelResizer";
+import { DynamicPanelGrid } from "./DynamicPanelGrid";
 import { SIDEBAR_WIDTH, HEADER_HEIGHT } from "@/hooks/useWebviews";
 import { useUpdatePanelWidthFracs } from "@/hooks/usePanels";
-import type { LayoutType, Panel, PanelLayoutInfo } from "@/types";
+import type { LayoutType, Panel, PanelLayoutInfo, DynamicLayout, PanelType, WidgetId } from "@/types";
 
 const MIN_COL_FRAC = 0.12;
 
@@ -21,9 +22,23 @@ function initFractions(panels: Panel[], colCount: number): number[] {
 interface Props {
   panels: Panel[];
   layout: LayoutType;
+  // Solo para layout dinámico
+  dynamicLayout?: DynamicLayout | null;
+  onDynamicLayoutChange?: (layout: DynamicLayout) => void;
+  onAddPanelToColumn?: (colIdx: number, type: PanelType, widgetId?: WidgetId) => Promise<void>;
+  onAddColumn?: () => void;
+  onRemovePanel?: (panelId: string) => Promise<void>;
 }
 
-export function PanelGrid({ panels, layout }: Props) {
+export function PanelGrid({
+  panels,
+  layout,
+  dynamicLayout,
+  onDynamicLayoutChange,
+  onAddPanelToColumn,
+  onAddColumn,
+  onRemovePanel,
+}: Props) {
   const sorted = useMemo(
     () => [...panels].sort((a, b) => a.position - b.position),
     [panels]
@@ -136,6 +151,27 @@ export function PanelGrid({ panels, layout }: Props) {
     },
     [sorted, layout, updatePanelWidthFracs]
   );
+
+  // Layout dinámico: delegar a DynamicPanelGrid
+  if (layout === "dynamic") {
+    if (!dynamicLayout || !onDynamicLayoutChange || !onAddPanelToColumn || !onAddColumn) {
+      return (
+        <div style={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", color: "var(--text3)", fontSize: 12 }}>
+          Cargando layout…
+        </div>
+      );
+    }
+    return (
+      <DynamicPanelGrid
+        panels={panels}
+        dynamicLayout={dynamicLayout}
+        onLayoutChange={onDynamicLayoutChange}
+        onAddPanel={onAddPanelToColumn}
+        onAddColumn={onAddColumn}
+        onRemovePanel={onRemovePanel ?? (() => Promise.resolve())}
+      />
+    );
+  }
 
   // 2x2: grid fijo sin separadores arrastrables
   if (layout === "2x2") {
