@@ -2,6 +2,7 @@ import { useRef } from "react";
 import {
   Briefcase, User, Code2, Palette, DollarSign, Mail,
   Globe, Zap, Star, Home, BookOpen, Film, Music, Layout,
+  Monitor, LayoutDashboard, Bookmark, Camera, BarChart2, Terminal, Cpu,
   type LucideIcon,
 } from "lucide-react";
 import { LongPressRing } from "@/components/ui/LongPressRing";
@@ -16,6 +17,14 @@ interface Props {
   onSelect: () => void;
   onEdit?: () => void;
 }
+
+// Mapear nombre de icono guardado (string) a componente Lucide
+const ICON_NAME_MAP: Record<string, LucideIcon> = {
+  Monitor, Code2, Globe, LayoutDashboard, Bookmark, Zap,
+  Music, Mail, Camera, BarChart2, Terminal, Cpu,
+  // Compatibilidad con otros nombres usados en el picker
+  Briefcase, User, Palette, DollarSign, Star, Home, BookOpen, Film, Layout,
+};
 
 // Mapear nombre del workspace a un icono Lucide según palabras clave
 function resolveIcon(name: string): LucideIcon | null {
@@ -38,7 +47,9 @@ function resolveIcon(name: string): LucideIcon | null {
 }
 
 export function WorkspaceItem({ workspace, isActive, shortcutIndex, onSelect, onEdit }: Props) {
-  const Icon = resolveIcon(workspace.name);
+  // Primero buscar por nombre de icono guardado, luego por keywords del nombre
+  const Icon = (workspace.icon && ICON_NAME_MAP[workspace.icon])
+    ?? resolveIcon(workspace.name);
   const emoji = workspace.icon ?? workspace.name.charAt(0).toUpperCase();
   // Evitar que onClick dispare onSelect justo después de completar el long-press
   const longPressCompleted = useRef(false);

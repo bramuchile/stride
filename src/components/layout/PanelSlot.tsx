@@ -6,6 +6,7 @@ import { WidgetPanel } from "@/components/panels/WidgetPanel";
 import { PanelHeader } from "@/components/panels/PanelHeader";
 import { PanelOverlay, PanelOverlayCollapsedBar } from "@/components/panels/PanelOverlay";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
+import { useUpdatePanel } from "@/hooks/usePanels";
 import { SIDEBAR_WIDTH, HEADER_HEIGHT } from "@/hooks/useWebviews";
 import type { Panel, PanelType, WidgetId } from "@/types";
 
@@ -21,7 +22,15 @@ interface Props {
 
 export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn }: Props) {
   const [overlayCollapsed, setOverlayCollapsed] = useState(false);
-  const { webviewMap } = useWorkspaceStore();
+  const { webviewMap, setWebviewUrl } = useWorkspaceStore();
+  const updatePanel = useUpdatePanel();
+
+  // Navegación desde el new tab page (panel sin URL)
+  const handleWebPanelNavigate = useCallback(async (url: string) => {
+    await invoke("navigate_panel_webview", { panelId: panel.id, url }).catch(console.error);
+    updatePanel.mutate({ ...panel, url });
+    setWebviewUrl(panel.id, url);
+  }, [panel, updatePanel, setWebviewUrl]);
 
   const hasOverlay =
     panel.type === "WEB" &&
@@ -109,7 +118,7 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
           )}
 
           {/* WebView2 spacer — el webview nativo se renderiza aquí vía Rust */}
-          <WebPanel panel={panel} />
+          <WebPanel panel={panel} onNavigate={handleWebPanelNavigate} />
 
           {/* Overlay bottom */}
           {hasOverlay && panel.overlay_position === "bottom" && (

@@ -37,6 +37,17 @@ export function useDynamicLayout(workspaceId: string | null) {
     await save({ columns: newColumns });
   }, [layout, save]);
 
+  const addColumnWithPanel = useCallback(async (panelId: string) => {
+    if (!layout) return;
+    const newColCount = layout.columns.length + 1;
+    const equalFrac = 1 / newColCount;
+    const newColumns: DynamicColumn[] = [
+      ...layout.columns.map((col) => ({ ...col, width_frac: equalFrac })),
+      { width_frac: equalFrac, panels: [{ panel_id: panelId, height_frac: 1.0 }] },
+    ];
+    await save({ columns: newColumns });
+  }, [layout, save]);
+
   const addPanelToColumn = useCallback(
     async (colIdx: number, panelId: string) => {
       if (!layout) return;
@@ -121,6 +132,7 @@ export function useDynamicLayout(workspaceId: string | null) {
     layout,
     save,
     addColumn,
+    addColumnWithPanel,
     addPanelToColumn,
     updateColumnWidths,
     updateRowHeights,

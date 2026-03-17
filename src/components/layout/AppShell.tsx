@@ -28,7 +28,7 @@ export function AppShell() {
 
   // Layout dinámico — solo activo cuando el workspace activo tiene layout "dynamic"
   const isDynamic = activeWorkspace?.layout === "dynamic";
-  const { layout: dynamicLayout, save: saveDynLayout, addColumn, addPanelToColumn, removePanel } = useDynamicLayout(
+  const { layout: dynamicLayout, save: saveDynLayout, addColumnWithPanel, addPanelToColumn, removePanel } = useDynamicLayout(
     isDynamic ? activeWorkspaceId : null
   );
 
@@ -114,6 +114,21 @@ export function AppShell() {
     [activeWorkspaceId, panels.length, createPanel, addPanelToColumn]
   );
 
+  // Al crear una nueva columna: añadir panel WEB automáticamente sin preguntar.
+  const handleAddColumn = useCallback(async () => {
+    if (!activeWorkspaceId) return;
+    const newPanelId = crypto.randomUUID();
+    await createPanel.mutateAsync({
+      id: newPanelId,
+      workspace_id: activeWorkspaceId,
+      type: "WEB",
+      url: undefined,
+      widget_id: undefined,
+      position: panels.length,
+    });
+    await addColumnWithPanel(newPanelId);
+  }, [activeWorkspaceId, panels.length, createPanel, addColumnWithPanel]);
+
   // Para resize drag en DynamicPanelGrid: actualizar layout inmediatamente (optimista)
   // y persistir en SQLite.
   const handleDynamicLayoutChange = useCallback(
@@ -157,7 +172,7 @@ export function AppShell() {
             dynamicLayout={isDynamic ? dynamicLayout : undefined}
             onDynamicLayoutChange={isDynamic ? handleDynamicLayoutChange : undefined}
             onAddPanelToColumn={isDynamic ? handleAddPanelToColumn : undefined}
-            onAddColumn={isDynamic ? addColumn : undefined}
+            onAddColumn={isDynamic ? handleAddColumn : undefined}
             onRemovePanel={isDynamic ? handleRemovePanel : undefined}
           />
         )}

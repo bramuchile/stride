@@ -1,4 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import {
+  Monitor, Code2, Globe, LayoutDashboard, Bookmark, Zap,
+  Music, Mail, Camera, BarChart2, Terminal, Cpu,
+  type LucideIcon,
+} from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -29,8 +34,6 @@ interface Slot {
 
 // --- Constantes ---
 
-const EMOJI_OPTIONS = ["💼", "📊", "🎮", "⚙️", "🎯", "📚", "🚀", "🎨", "📰", "🎵", "🏠", "📝", "💡", "📈", "🔥"];
-
 const WIDGET_GRID: { id: WidgetId | ""; label: string; icon: string }[] = [
   { id: "scratchpad",   label: "Notas",    icon: "📝" },
   { id: "next-meeting", label: "Reunión",  icon: "📅" },
@@ -38,19 +41,52 @@ const WIDGET_GRID: { id: WidgetId | ""; label: string; icon: string }[] = [
   { id: "",             label: "Sin widget", icon: "✕" },
 ];
 
+const ICON_OPTIONS: { name: string; Icon: LucideIcon }[] = [
+  { name: "Monitor",         Icon: Monitor },
+  { name: "Code2",           Icon: Code2 },
+  { name: "Globe",           Icon: Globe },
+  { name: "LayoutDashboard", Icon: LayoutDashboard },
+  { name: "Bookmark",        Icon: Bookmark },
+  { name: "Zap",             Icon: Zap },
+  { name: "Music",           Icon: Music },
+  { name: "Mail",            Icon: Mail },
+  { name: "Camera",          Icon: Camera },
+  { name: "BarChart2",       Icon: BarChart2 },
+  { name: "Terminal",        Icon: Terminal },
+  { name: "Cpu",             Icon: Cpu },
+];
+
+const AUTO_NAMES: Partial<Record<LayoutType, string>> = {
+  "2col":    "Workspace dividido",
+  "3col":    "Workspace triple",
+  "2x2":     "Workspace grid",
+  "dynamic": "Layout libre",
+};
+
 const LAYOUT_OPTIONS = [
   {
-    value: "1col" as LayoutType,
-    label: "Simple",
-    description: "1 panel",
+    value: "dynamic" as LayoutType,
+    label: "Libre",
+    description: "columnas + filas",
     slotCount: 1,
     preview: (active: boolean) => (
       <svg width="44" height="30" viewBox="0 0 44 30">
-        <rect x="2" y="2" width="40" height="26" rx="3"
+        <rect x="2" y="2" width="16" height="11" rx="2"
           fill={active ? "rgba(124,106,247,0.3)" : "rgba(255,255,255,0.06)"}
           stroke={active ? "rgba(124,106,247,0.6)" : "rgba(255,255,255,0.1)"}
           strokeWidth="1"
         />
+        <rect x="2" y="17" width="16" height="11" rx="2"
+          fill={active ? "rgba(124,106,247,0.2)" : "rgba(255,255,255,0.04)"}
+          stroke={active ? "rgba(124,106,247,0.6)" : "rgba(255,255,255,0.1)"}
+          strokeWidth="1"
+        />
+        <rect x="26" y="2" width="16" height="26" rx="2"
+          fill={active ? "rgba(124,106,247,0.15)" : "rgba(255,255,255,0.04)"}
+          stroke={active ? "rgba(124,106,247,0.6)" : "rgba(255,255,255,0.1)"}
+          strokeWidth="1"
+        />
+        <text x="34" y="19" fontSize="8" fill={active ? "rgba(124,106,247,0.9)" : "rgba(255,255,255,0.3)"} textAnchor="middle">+</text>
       </svg>
     ),
   },
@@ -110,32 +146,6 @@ const LAYOUT_OPTIONS = [
       </svg>
     ),
   },
-  {
-    value: "dynamic" as LayoutType,
-    label: "Libre",
-    description: "columnas + filas",
-    slotCount: 1,
-    preview: (active: boolean) => (
-      <svg width="44" height="30" viewBox="0 0 44 30">
-        <rect x="2" y="2" width="16" height="11" rx="2"
-          fill={active ? "rgba(124,106,247,0.3)" : "rgba(255,255,255,0.06)"}
-          stroke={active ? "rgba(124,106,247,0.6)" : "rgba(255,255,255,0.1)"}
-          strokeWidth="1"
-        />
-        <rect x="2" y="17" width="16" height="11" rx="2"
-          fill={active ? "rgba(124,106,247,0.2)" : "rgba(255,255,255,0.04)"}
-          stroke={active ? "rgba(124,106,247,0.6)" : "rgba(255,255,255,0.1)"}
-          strokeWidth="1"
-        />
-        <rect x="26" y="2" width="16" height="26" rx="2"
-          fill={active ? "rgba(124,106,247,0.15)" : "rgba(255,255,255,0.04)"}
-          stroke={active ? "rgba(124,106,247,0.6)" : "rgba(255,255,255,0.1)"}
-          strokeWidth="1"
-        />
-        <text x="34" y="19" fontSize="8" fill={active ? "rgba(124,106,247,0.9)" : "rgba(255,255,255,0.3)"} textAnchor="middle">+</text>
-      </svg>
-    ),
-  },
 ];
 
 // --- Helpers ---
@@ -175,64 +185,18 @@ interface Props {
   onClose: () => void;
 }
 
-// --- ActionButtons (componente compartido) ---
+// --- Etiqueta de sección ---
 
-interface ActionButtonsProps {
-  onBack?: () => void;
-  onCancel: () => void;
-  onPrimary: () => void;
-  primaryLabel: string;
-  primaryDisabled?: boolean;
-  isPending?: boolean;
-  showArrow?: boolean;
-}
-
-function ActionButtons({ onBack, onCancel, onPrimary, primaryLabel, primaryDisabled, isPending, showArrow }: ActionButtonsProps) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-      {onBack && (
-        <button
-          onClick={onBack}
-          style={{
-            padding: "7px 14px", borderRadius: 8,
-            background: "transparent",
-            border: "1px solid var(--border2)",
-            color: "var(--text3)", fontSize: 12, cursor: "pointer",
-          }}
-        >
-          ← Atrás
-        </button>
-      )}
-      <div style={{ flex: 1 }} />
-      <button
-        onClick={onCancel}
-        style={{
-          padding: "7px 16px", borderRadius: 8,
-          background: "transparent",
-          border: "1px solid var(--border2)",
-          color: "var(--text3)", fontSize: 12, cursor: "pointer",
-        }}
-      >
-        Cancelar
-      </button>
-      <button
-        onClick={onPrimary}
-        disabled={primaryDisabled || isPending}
-        style={{
-          padding: "7px 16px", borderRadius: 8,
-          background: primaryDisabled ? "var(--border2)" : "var(--accent)",
-          border: "none",
-          color: "#fff", fontSize: 12, fontWeight: 600,
-          cursor: (primaryDisabled || isPending) ? "default" : "pointer",
-          transition: "all 0.15s",
-          display: "flex", alignItems: "center", gap: 6,
-          opacity: isPending ? 0.6 : 1,
-        }}
-      >
-        {primaryLabel}
-        {showArrow && <span style={{ fontSize: 14 }}>→</span>}
-      </button>
-    </div>
+    <label style={{
+      display: "block", marginBottom: 8,
+      fontSize: 10, fontWeight: 700,
+      color: "var(--text3)", letterSpacing: "0.08em",
+      textTransform: "uppercase",
+    }}>
+      {children}
+    </label>
   );
 }
 
@@ -241,13 +205,16 @@ function ActionButtons({ onBack, onCancel, onPrimary, primaryLabel, primaryDisab
 export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Props) {
   const isEditing = !!workspace;
 
-  const [step, setStep] = useState<"info" | "panels">("info");
-  const [stepDirection, setStepDirection] = useState<"forward" | "back">("forward");
+  const [showPanelConfig, setShowPanelConfig] = useState(false);
+  const [nameEditing, setNameEditing] = useState(false);
+  const [nameAutoGenerated, setNameAutoGenerated] = useState(true);
   const [name, setName] = useState("");
-  const [icon, setIcon] = useState("📁");
-  const [layout, setLayout] = useState<LayoutType>("2col");
+  const [icon, setIcon] = useState("Monitor");
+  const [layout, setLayout] = useState<LayoutType>("dynamic");
   const [slots, setSlots] = useState<Slot[]>(defaultSlots(2));
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
   const createWorkspaceMutation = useCreateWorkspace();
@@ -263,11 +230,12 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
 
   useEffect(() => {
     if (!open) return;
-    const initialLayout = workspace?.layout ?? "2col";
-    setStep(startAtPanels ? "panels" : "info");
-    setStepDirection("forward");
-    setName(workspace?.name ?? "");
-    setIcon(workspace?.icon ?? "📁");
+    const initialLayout = workspace?.layout ?? "dynamic";
+    setShowPanelConfig(startAtPanels ?? false);
+    setNameEditing(false);
+    setNameAutoGenerated(!isEditing);
+    setName(isEditing ? (workspace!.name ?? "") : (AUTO_NAMES[initialLayout] ?? "Mi workspace"));
+    setIcon(isEditing ? (workspace!.icon ?? "Monitor") : "Monitor");
     setLayout(initialLayout);
     setConfirmDelete(false);
     if (!isEditing) {
@@ -283,13 +251,23 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
     }
   }, [isEditing, existingPanels]);
 
+  // Foco automático al entrar en edición de nombre
+  useEffect(() => {
+    if (nameEditing) {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }
+  }, [nameEditing]);
+
   function handleLayoutChange(newLayout: LayoutType) {
     const opt = LAYOUT_OPTIONS.find(l => l.value === newLayout)!;
     setLayout(newLayout);
+    if (nameAutoGenerated) {
+      setName(AUTO_NAMES[newLayout] ?? "Mi workspace");
+    }
     if (!isEditing) {
       setSlots(defaultSlots(opt.slotCount));
     } else {
-      // En edición: adaptar slots al nuevo conteo sin perder los existentes
       const newCount = opt.slotCount;
       setSlots(prev => {
         if (newCount > prev.length) {
@@ -309,26 +287,48 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
     }
   }
 
+  function confirmNameEdit() {
+    setNameEditing(false);
+    if (name.trim()) setNameAutoGenerated(false);
+  }
+
   function updateSlot(i: number, patch: Partial<Slot>) {
     setSlots(prev => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   }
 
-  async function handleNextStep() {
+  // Crear workspace rápido con paneles vacíos (flujo principal)
+  async function handleCreate() {
     if (!name.trim()) return;
     if (layout === "dynamic") {
       await handleSaveDynamic();
       return;
     }
-    if (isEditing) {
-      await updateWorkspaceMutation.mutateAsync({
-        id: workspace!.id,
-        name: name.trim(),
-        icon,
-        layout,
+    const newId = `ws-${Date.now()}`;
+    await createWorkspaceMutation.mutateAsync({ id: newId, name: name.trim(), layout, icon });
+    for (let i = 0; i < slots.length; i++) {
+      await createPanel.mutateAsync({
+        id: crypto.randomUUID(),
+        workspace_id: newId,
+        type: "WEB",
+        url: undefined,
+        widget_id: undefined,
+        position: i,
       });
     }
-    setStepDirection("forward");
-    setStep("panels");
+    setActiveWorkspace(newId);
+    handleClose();
+  }
+
+  // Guardar solo metadata en edit mode (sin panel config)
+  async function handleSaveInfo() {
+    if (!name.trim() || !workspace) return;
+    await updateWorkspaceMutation.mutateAsync({
+      id: workspace.id,
+      name: name.trim(),
+      icon,
+      layout,
+    });
+    handleClose();
   }
 
   async function handleSaveDynamic() {
@@ -338,12 +338,30 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
     } else {
       await createWorkspaceMutation.mutateAsync({ id: newId, name: name.trim(), layout, icon });
     }
-    const initialDynLayout: DynamicLayout = { columns: [{ width_frac: 1, panels: [] }] };
-    await saveDynamicLayout(newId, initialDynLayout);
-    if (!isEditing) setActiveWorkspace(newId);
+    // Crear un panel WEB vacío para que la primera columna no quede vacía
+    if (!isEditing) {
+      const panelId = crypto.randomUUID();
+      await createPanel.mutateAsync({
+        id: panelId,
+        workspace_id: newId,
+        type: "WEB",
+        url: undefined,
+        widget_id: undefined,
+        position: 0,
+      });
+      const initialDynLayout: DynamicLayout = {
+        columns: [{ width_frac: 1, panels: [{ panel_id: panelId, height_frac: 1 }] }],
+      };
+      await saveDynamicLayout(newId, initialDynLayout);
+      setActiveWorkspace(newId);
+    } else {
+      const initialDynLayout: DynamicLayout = { columns: [{ width_frac: 1, panels: [] }] };
+      await saveDynamicLayout(newId, initialDynLayout);
+    }
     handleClose();
   }
 
+  // Guardar con panel config (flujo avanzado)
   async function handleSave() {
     if (!isEditing) {
       const newId = `ws-${Date.now()}`;
@@ -391,7 +409,6 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
       }
     }
 
-    // Destruir WebViews y eliminar de DB los paneles que ya no están en el nuevo layout
     const newIds = new Set(slots.map(s => s.id).filter(Boolean));
     const db = await getDb();
     for (const ep of existingPanels) {
@@ -402,11 +419,9 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
         }
         await db.execute("DELETE FROM panels WHERE id = $1", [ep.id]);
       }
-      // Forzar re-fetch para que React no muestre paneles fantasma
       await queryClient.invalidateQueries({ queryKey: ["panels", wsId] });
     }
 
-    // Actualizar workspace con el nuevo layout
     await updateWorkspaceMutation.mutateAsync({ id: wsId, name: name.trim(), icon, layout });
 
     const webPanels = slots.filter(s => s.type === "WEB" && s.id && webviewMap[s.id]);
@@ -444,11 +459,12 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
   }
 
   function handleClose() {
-    setStep("info");
-    setStepDirection("forward");
+    setShowPanelConfig(false);
+    setNameEditing(false);
+    setNameAutoGenerated(true);
     setName("");
-    setIcon("📁");
-    setLayout("2col");
+    setIcon("Monitor");
+    setLayout("dynamic");
     setConfirmDelete(false);
     setSlots(defaultSlots(2));
     onClose();
@@ -463,11 +479,6 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
   const isDynamic = layout === "dynamic";
 
   if (!open) return null;
-
-  // Step pills — solo mostrar step 2 si el layout no es dynamic
-  const steps = isDynamic
-    ? [{ key: "info", label: "Info" }]
-    : [{ key: "info", label: "Info" }, { key: "panels", label: "Paneles" }];
 
   return (
     <div
@@ -488,86 +499,23 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
         overflow: "hidden",
         boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
       }}>
-        {/* Header del modal */}
+        {/* Header */}
         <div style={{
           padding: "20px 24px 16px",
-          display: "flex", alignItems: "center",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
           borderBottom: "1px solid var(--border)",
-          position: "relative",
         }}>
-          {/* Step pills centrados */}
-          <div style={{
-            position: "absolute", left: "50%", transform: "translateX(-50%)",
-            display: "flex", alignItems: "center", gap: 0,
-          }}>
-            {steps.map((s, i) => {
-              const isDone = steps.indexOf({ key: step, label: "" } as typeof steps[0]) === -1
-                ? step === "panels" && s.key === "info"
-                : false;
-              const isActive = step === s.key;
-              const isCompleted = !isActive && step === "panels" && s.key === "info";
-              return (
-                <div key={s.key} style={{ display: "flex", alignItems: "center" }}>
-                  {i > 0 && (
-                    <div style={{
-                      width: 32, height: 1,
-                      background: isCompleted ? "var(--accent)" : "var(--border)",
-                      transition: "background 0.3s",
-                    }} />
-                  )}
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                    <div style={{
-                      width: 24, height: 24, borderRadius: "50%",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 11, fontWeight: 700,
-                      background: isCompleted
-                        ? "var(--accent)"
-                        : isActive
-                          ? "rgba(124,106,247,0.15)"
-                          : "var(--border)",
-                      border: isActive
-                        ? "1.5px solid var(--accent)"
-                        : isCompleted
-                          ? "1.5px solid var(--accent)"
-                          : "1.5px solid var(--border2)",
-                      color: isCompleted || isActive ? "var(--accent2)" : "var(--text3)",
-                      transition: "all 0.3s",
-                    }}>
-                      {isCompleted ? "✓" : i + 1}
-                    </div>
-                    <span style={{
-                      fontSize: 9, fontWeight: 600, letterSpacing: "0.06em",
-                      color: isActive ? "var(--text)" : "var(--text3)",
-                      textTransform: "uppercase",
-                      transition: "color 0.3s",
-                    }}>
-                      {s.label}
-                    </span>
-                  </div>
-                </div>
-              );
-              void isDone;
-            })}
-          </div>
-
-          {/* Título izquierda */}
           <span style={{ fontSize: 12, color: "var(--text3)" }}>
             {isEditing ? "Editar workspace" : "Nuevo workspace"}
           </span>
-
-          {/* Cerrar derecha */}
           <button
             onClick={handleClose}
             style={{
-              marginLeft: "auto",
               width: 24, height: 24,
               display: "flex", alignItems: "center", justifyContent: "center",
               borderRadius: 6,
-              background: "transparent",
-              border: "none",
-              color: "var(--text3)",
-              fontSize: 14,
-              cursor: "pointer",
+              background: "transparent", border: "none",
+              color: "var(--text3)", fontSize: 14, cursor: "pointer",
               transition: "background 0.15s, color 0.15s",
             }}
             onMouseEnter={e => {
@@ -585,37 +533,41 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
 
         {/* Contenido animado */}
         <div style={{ padding: "16px 24px 24px", overflow: "hidden" }}>
-          <div key={step} className={stepDirection === "forward" ? "step-enter-right" : "step-enter-left"}>
-            {step === "info" ? (
-              <StepInfo
-                name={name} setName={setName}
-                icon={icon} setIcon={setIcon}
-                layout={layout} onLayoutChange={handleLayoutChange}
-                onNext={handleNextStep}
+          <div
+            key={showPanelConfig ? "panels" : "info"}
+            className={showPanelConfig ? "step-enter-right" : "step-enter-left"}
+          >
+            {showPanelConfig ? (
+              <PanelConfigView
+                slots={slots}
+                onUpdateSlot={updateSlot}
+                onSave={handleSave}
+                onBack={() => setShowPanelConfig(false)}
                 onClose={handleClose}
-                isPending={isPending || updateWorkspaceMutation.isPending}
+                isPending={isPending}
                 isEditing={isEditing}
                 isDynamic={isDynamic}
+              />
+            ) : (
+              <MainView
+                icon={icon} setIcon={setIcon}
+                layout={layout} onLayoutChange={handleLayoutChange}
+                name={name} setName={setName}
+                nameEditing={nameEditing}
+                nameInputRef={nameInputRef}
+                onStartNameEdit={() => setNameEditing(true)}
+                onConfirmNameEdit={confirmNameEdit}
+                isDynamic={isDynamic}
+                isEditing={isEditing}
                 workspace={workspace ?? null}
                 confirmDelete={confirmDelete}
                 setConfirmDelete={setConfirmDelete}
                 onDelete={handleDelete}
                 deleteIsPending={deleteWorkspaceMutation.isPending}
-              />
-            ) : (
-              <StepPanels
-                slots={slots}
-                onUpdateSlot={updateSlot}
-                onSave={handleSave}
-                onBack={() => {
-                  setStepDirection("back");
-                  setStep("info");
-                }}
                 onClose={handleClose}
+                onConfigureUrls={() => setShowPanelConfig(true)}
+                onCreate={isEditing ? handleSaveInfo : handleCreate}
                 isPending={isPending}
-                isEditing={isEditing}
-                startAtPanels={!!startAtPanels}
-                isDynamic={isDynamic}
               />
             )}
           </div>
@@ -625,135 +577,89 @@ export function WorkspaceDialog({ open, workspace, startAtPanels, onClose }: Pro
   );
 }
 
-// --- StepInfo ---
+// --- MainView (vista principal de 1 paso) ---
 
-interface StepInfoProps {
-  name: string;
-  setName: (v: string) => void;
+interface MainViewProps {
   icon: string;
   setIcon: (v: string) => void;
   layout: LayoutType;
   onLayoutChange: (l: LayoutType) => void;
-  onNext: () => void;
-  onClose: () => void;
-  isPending: boolean;
-  isEditing: boolean;
+  name: string;
+  setName: (v: string) => void;
+  nameEditing: boolean;
+  nameInputRef: React.RefObject<HTMLInputElement | null>;
+  onStartNameEdit: () => void;
+  onConfirmNameEdit: () => void;
   isDynamic: boolean;
+  isEditing: boolean;
   workspace: Workspace | null;
   confirmDelete: boolean;
   setConfirmDelete: (v: boolean) => void;
   onDelete: () => void;
   deleteIsPending: boolean;
+  onClose: () => void;
+  onConfigureUrls: () => void;
+  onCreate: () => void;
+  isPending: boolean;
 }
 
-function StepInfo({
-  name, setName, icon, setIcon, layout, onLayoutChange,
-  onNext, onClose, isPending, isEditing, isDynamic, workspace,
+function MainView({
+  icon, setIcon, layout, onLayoutChange,
+  name, setName, nameEditing, nameInputRef,
+  onStartNameEdit, onConfirmNameEdit,
+  isDynamic, isEditing, workspace,
   confirmDelete, setConfirmDelete, onDelete, deleteIsPending,
-}: StepInfoProps) {
+  onClose, onConfigureUrls, onCreate, isPending,
+}: MainViewProps) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Selector de icono — grid 5 cols */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* Selector de icono — Lucide icons, grid 6 cols */}
       <div>
-        <label style={{
-          display: "block", marginBottom: 8,
-          fontSize: 10, fontWeight: 700,
-          color: "var(--text3)", letterSpacing: "0.08em",
-          textTransform: "uppercase",
-        }}>
-          Icono
-        </label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
-          {EMOJI_OPTIONS.map(e => (
-            <button
-              key={e}
-              onClick={() => setIcon(e)}
-              style={{
-                height: 36,
-                fontSize: 18,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                borderRadius: 8,
-                background: icon === e ? "rgba(124,106,247,0.15)" : "rgba(255,255,255,0.04)",
-                border: icon === e ? "1px solid rgba(124,106,247,0.5)" : "1px solid var(--border)",
-                cursor: "pointer",
-                transform: icon === e ? "scale(1.1)" : "scale(1)",
-                transition: "all 0.15s",
-              }}
-            >
-              {e}
-            </button>
-          ))}
-          <input
-            type="text"
-            value={!EMOJI_OPTIONS.includes(icon) ? icon : ""}
-            onChange={e => setIcon(e.target.value)}
-            placeholder="✏️"
-            style={{
-              height: 36,
-              fontSize: 18, textAlign: "center",
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              color: "var(--text)",
-              outline: "none",
-            }}
-          />
+        <SectionLabel>Icono</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
+          {ICON_OPTIONS.map(({ name: iconName, Icon }) => {
+            const isSelected = icon === iconName;
+            return (
+              <button
+                key={iconName}
+                onClick={() => setIcon(iconName)}
+                title={iconName}
+                style={{
+                  height: 40,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  borderRadius: 8,
+                  background: isSelected ? "rgba(124,106,247,0.15)" : "rgba(255,255,255,0.04)",
+                  border: isSelected
+                    ? "1px solid rgba(124,106,247,0.5)"
+                    : "1px solid rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                  color: isSelected ? "var(--accent)" : "var(--text3)",
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={e => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = "rgba(124,106,247,0.1)";
+                    e.currentTarget.style.color = "var(--accent2)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                    e.currentTarget.style.color = "var(--text3)";
+                  }
+                }}
+              >
+                <Icon size={16} />
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Nombre con hint "Enter ↵" */}
+      {/* Selector de layout */}
       <div>
-        <label style={{
-          display: "block", marginBottom: 8,
-          fontSize: 10, fontWeight: 700,
-          color: "var(--text3)", letterSpacing: "0.08em",
-          textTransform: "uppercase",
-        }}>
-          Nombre
-        </label>
-        <div style={{ position: "relative" }}>
-          <input
-            autoFocus
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && name.trim() && onNext()}
-            placeholder="Mi workspace"
-            style={{
-              width: "100%",
-              background: "var(--surface)",
-              border: "1px solid var(--border2)",
-              borderRadius: 8,
-              padding: "8px 12px",
-              fontSize: 13,
-              color: "var(--text)",
-              outline: "none",
-              transition: "border-color 0.15s",
-              boxSizing: "border-box",
-            }}
-            onFocus={e => e.currentTarget.style.borderColor = "var(--accent)"}
-            onBlur={e => e.currentTarget.style.borderColor = "var(--border2)"}
-          />
-          <span style={{
-            position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-            fontSize: 9, color: "var(--text4)", pointerEvents: "none",
-            opacity: name.trim() ? 1 : 0, transition: "opacity 0.15s",
-            fontFamily: "'Geist Mono', monospace",
-          }}>
-            Enter ↵
-          </span>
-        </div>
-      </div>
-
-      {/* Selector de layout — grid 5 cols */}
-      <div>
-        <label style={{
-          display: "block", marginBottom: 8,
-          fontSize: 10, fontWeight: 700,
-          color: "var(--text3)", letterSpacing: "0.08em",
-          textTransform: "uppercase",
-        }}>
-          Layout
-        </label>
+        <SectionLabel>Layout</SectionLabel>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
           {LAYOUT_OPTIONS.map(opt => (
             <button
@@ -793,9 +699,63 @@ function StepInfo({
         </div>
       </div>
 
+      {/* Nombre — pill editable */}
+      <div>
+        <SectionLabel>Nombre</SectionLabel>
+        {nameEditing ? (
+          <input
+            ref={nameInputRef}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && onConfirmNameEdit()}
+            onBlur={onConfirmNameEdit}
+            placeholder="Mi workspace"
+            style={{
+              width: "100%",
+              background: "var(--surface)",
+              border: "1px solid var(--accent)",
+              borderRadius: 8,
+              padding: "7px 12px",
+              fontSize: 13,
+              color: "var(--text)",
+              outline: "none",
+              boxSizing: "border-box",
+              boxShadow: "0 0 0 3px rgba(124,106,247,0.12)",
+            }}
+          />
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "4px 12px",
+              background: "rgba(124,106,247,0.08)",
+              border: "1px solid rgba(124,106,247,0.2)",
+              borderRadius: 20,
+              fontSize: 13, fontWeight: 500,
+              color: "var(--text)",
+            }}>
+              {name || "Sin nombre"}
+            </span>
+            <button
+              onClick={onStartNameEdit}
+              style={{
+                fontSize: 11, color: "var(--text3)",
+                background: "none", border: "none",
+                cursor: "pointer", padding: 0,
+                transition: "color 0.15s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = "var(--accent2)"}
+              onMouseLeave={e => e.currentTarget.style.color = "var(--text3)"}
+            >
+              editar
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Zona de peligro — solo en modo edición */}
       {isEditing && (
-        <div style={{ marginTop: 4, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+        <div style={{ paddingTop: 4, borderTop: "1px solid var(--border)" }}>
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
@@ -816,10 +776,7 @@ function StepInfo({
               background: "rgba(239,68,68,0.08)",
               border: "1px solid rgba(239,68,68,0.25)",
             }}>
-              <p style={{
-                fontSize: 12, color: "#fca5a5",
-                margin: "0 0 10px 0",
-              }}>
+              <p style={{ fontSize: 12, color: "#fca5a5", margin: "0 0 10px 0" }}>
                 ¿Eliminar «{workspace?.name}»? Esta acción no se puede deshacer.
               </p>
               <div style={{ display: "flex", gap: 8 }}>
@@ -855,14 +812,153 @@ function StepInfo({
         </div>
       )}
 
-      <ActionButtons
-        onCancel={onClose}
-        onPrimary={onNext}
-        primaryLabel={isDynamic ? (isEditing ? "Guardar" : "Crear workspace") : "Configurar paneles"}
-        primaryDisabled={!name.trim()}
-        isPending={isPending}
-        showArrow={!isDynamic}
-      />
+      {/* Botones */}
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onClose}
+          style={{
+            padding: "7px 16px", borderRadius: 8,
+            background: "transparent",
+            border: "1px solid var(--border2)",
+            color: "var(--text3)", fontSize: 12, cursor: "pointer",
+          }}
+        >
+          Cancelar
+        </button>
+        {/* Configurar URLs — solo para layouts estáticos */}
+        {!isDynamic && (
+          <button
+            onClick={onConfigureUrls}
+            style={{
+              padding: "7px 14px", borderRadius: 8,
+              background: "transparent",
+              border: "1px solid rgba(124,106,247,0.4)",
+              color: "var(--accent2)", fontSize: 12, cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = "rgba(124,106,247,0.08)";
+              e.currentTarget.style.borderColor = "rgba(124,106,247,0.6)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = "transparent";
+              e.currentTarget.style.borderColor = "rgba(124,106,247,0.4)";
+            }}
+          >
+            Configurar URLs →
+          </button>
+        )}
+        <button
+          onClick={onCreate}
+          disabled={!name.trim() || isPending}
+          style={{
+            padding: "7px 16px", borderRadius: 8,
+            background: !name.trim() ? "var(--border2)" : "var(--accent)",
+            border: "none",
+            color: "#fff", fontSize: 12, fontWeight: 600,
+            cursor: (!name.trim() || isPending) ? "default" : "pointer",
+            transition: "all 0.15s",
+            opacity: isPending ? 0.6 : 1,
+          }}
+        >
+          {isEditing ? "Guardar" : "Crear"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- PanelConfigView (vista avanzada de URLs — ex StepPanels) ---
+
+interface PanelConfigViewProps {
+  slots: Slot[];
+  onUpdateSlot: (i: number, patch: Partial<Slot>) => void;
+  onSave: () => void;
+  onBack: () => void;
+  onClose: () => void;
+  isPending: boolean;
+  isEditing: boolean;
+  isDynamic: boolean;
+}
+
+function PanelConfigView({
+  slots, onUpdateSlot, onSave, onBack, onClose, isPending, isEditing, isDynamic,
+}: PanelConfigViewProps) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      {/* Back link */}
+      <button
+        onClick={onBack}
+        style={{
+          alignSelf: "flex-start",
+          marginBottom: 16,
+          fontSize: 11, color: "var(--text3)",
+          background: "none", border: "none",
+          cursor: "pointer", padding: 0,
+          transition: "color 0.15s",
+          display: "flex", alignItems: "center", gap: 4,
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = "var(--accent2)"}
+        onMouseLeave={e => e.currentTarget.style.color = "var(--text3)"}
+      >
+        ← Configuración básica
+      </button>
+
+      {isDynamic ? (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 12,
+          padding: "16px",
+          background: "rgba(124,106,247,0.06)",
+          border: "1px solid rgba(124,106,247,0.2)",
+          borderRadius: 10,
+          marginBottom: 16,
+        }}>
+          <span style={{ fontSize: 20 }}>🆓</span>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+              Layout libre
+            </p>
+            <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--text3)" }}>
+              Añade paneles directamente desde el canvas usando el botón + en cada columna.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div style={{ maxHeight: "50vh", overflowY: "auto", paddingRight: 2 }}>
+          {slots.map((slot, i) => (
+            <SlotCard key={slot.id ?? i} slot={slot} index={i} onUpdateSlot={onUpdateSlot} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={onClose}
+          style={{
+            padding: "7px 16px", borderRadius: 8,
+            background: "transparent",
+            border: "1px solid var(--border2)",
+            color: "var(--text3)", fontSize: 12, cursor: "pointer",
+          }}
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onSave}
+          disabled={isPending}
+          style={{
+            padding: "7px 16px", borderRadius: 8,
+            background: "var(--accent)", border: "none",
+            color: "#fff", fontSize: 12, fontWeight: 600,
+            cursor: isPending ? "default" : "pointer",
+            opacity: isPending ? 0.6 : 1,
+          }}
+        >
+          {isEditing ? "Guardar cambios" : "Crear workspace"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -884,7 +980,6 @@ function SlotCard({ slot, index: i, onUpdateSlot }: SlotCardProps) {
       overflow: "hidden",
       marginBottom: 8,
     }}>
-      {/* Header del slot */}
       <div style={{
         display: "flex", alignItems: "center",
         justifyContent: "space-between",
@@ -898,7 +993,6 @@ function SlotCard({ slot, index: i, onUpdateSlot }: SlotCardProps) {
         }}>
           PANEL {i + 1}
         </span>
-        {/* Toggle WEB / WIDGET */}
         <div style={{
           display: "flex",
           background: "var(--base-deep)",
@@ -924,7 +1018,6 @@ function SlotCard({ slot, index: i, onUpdateSlot }: SlotCardProps) {
         </div>
       </div>
 
-      {/* Body del slot */}
       <div style={{ padding: "10px 12px" }}>
         {slot.type === "WEB" ? (
           <>
@@ -1012,7 +1105,6 @@ function SlotCard({ slot, index: i, onUpdateSlot }: SlotCardProps) {
             </details>
           </>
         ) : (
-          // Widget selector — grid 2×2
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
             {WIDGET_GRID.map(w => (
               <button
@@ -1037,64 +1129,6 @@ function SlotCard({ slot, index: i, onUpdateSlot }: SlotCardProps) {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-// --- StepPanels ---
-
-interface StepPanelsProps {
-  slots: Slot[];
-  onUpdateSlot: (i: number, patch: Partial<Slot>) => void;
-  onSave: () => void;
-  onBack: () => void;
-  onClose: () => void;
-  isPending: boolean;
-  isEditing: boolean;
-  startAtPanels: boolean;
-  isDynamic: boolean;
-}
-
-function StepPanels({
-  slots, onUpdateSlot, onSave, onBack, onClose, isPending, isEditing, startAtPanels, isDynamic,
-}: StepPanelsProps) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-      {isDynamic ? (
-        // Mensaje especial para layout libre
-        <div style={{
-          display: "flex", alignItems: "flex-start", gap: 12,
-          padding: "16px",
-          background: "rgba(124,106,247,0.06)",
-          border: "1px solid rgba(124,106,247,0.2)",
-          borderRadius: 10,
-          marginBottom: 16,
-        }}>
-          <span style={{ fontSize: 20 }}>🆓</span>
-          <div>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-              Layout libre
-            </p>
-            <p style={{ margin: "4px 0 0", fontSize: 11, color: "var(--text3)" }}>
-              Añade paneles directamente desde el canvas usando el botón + en cada columna.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div style={{ maxHeight: "50vh", overflowY: "auto", paddingRight: 2 }}>
-          {slots.map((slot, i) => (
-            <SlotCard key={slot.id ?? i} slot={slot} index={i} onUpdateSlot={onUpdateSlot} />
-          ))}
-        </div>
-      )}
-
-      <ActionButtons
-        onBack={!startAtPanels ? onBack : undefined}
-        onCancel={onClose}
-        onPrimary={onSave}
-        primaryLabel={isEditing ? "Guardar cambios" : "Crear workspace"}
-        isPending={isPending}
-      />
     </div>
   );
 }
