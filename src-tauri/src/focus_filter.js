@@ -12,18 +12,13 @@
   // ── Listas de filtrado ──────────────────────────────────────────────────────
   var DOMAINS = new Set(/*STRIDE_DOMAINS*/);
 
+  // Solo patrones que no sean endpoints de tracking propios de YouTube.
+  // NO bloquear /api/stats/ads, /ptracking, /generate_204, /watchtime — esos
+  // son señales directas que activan enforcement mode en el servidor de YouTube.
   var YT_PATTERNS = [
     /\/pagead\//,
-    /\/api\/stats\/ads/,
-    /googlevideo\.com\/videoplayback\?.*ctier=/,
-    /\/get_video_info\?.*adformat/,
     /youtube\.com\/pagead\//,
-    /youtube\.com\/ptracking/,
-    /youtube\.com\/api\/stats\/watchtime.*ad/,
-    /\.youtube\.com\/generate_204/,
-    /googleads\.g\.doubleclick\.net/,
-    /ad\.doubleclick\.net/,
-    /securepubads\.g\.doubleclick\.net/,
+    /\/get_video_info\?.*adformat/,
   ];
 
   var CRITICAL = [
@@ -42,7 +37,10 @@
     "playerAds",
     "adSlots",
     "adBreakHeartbeatParams",
-    "auxiliaryUi",
+    // "auxiliaryUi" eliminado: en playerResponse contiene también overlays NO-ad
+    // (age-gate, DRM notices, fallback UI). Es un Object → pruneAds lo borraba
+    // completamente (delete, no []) → el player comprueba su existencia y
+    // aborta con error interno 282054944 si no está presente.
     "adSlotLoggingData",
     "serializedAdServingDataEntry",
   ];
@@ -63,15 +61,6 @@
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
-  function isYTUrl(url) {
-    try {
-      var h = new URL(url).hostname;
-      return h === "www.youtube.com" || h === "youtube.com" ||
-             h.endsWith(".youtube.com") || h === "youtu.be" ||
-             h === "youtubei.googleapis.com";
-    } catch (e) { return false; }
-  }
-
   function shouldBlock(url) {
     try {
       var u = new URL(url);
@@ -90,123 +79,17 @@
     return false;
   }
 
-  // ── Helpers para inline scripts (Capas 3 y 4) ───────────────────────────────
-  // Patrones que identifican scripts inline con contenido de ads
-  var AD_SCRIPT_PATTERNS = [
-    /serverContract/,
-    /"adPlacements"/,
-    /"playerAds"/,
-    /"adSlots"/,
-  ];
-
-  function hasAdContent(text) {
-    return AD_SCRIPT_PATTERNS.some(function (p) { return p.test(text); });
-  }
-
-  // Reemplazar arrays de ad keys en texto de script con versiones vacías.
-  // Lazy match .*? para no capturar demasiado contenido entre corchetes.
-  // El flag /gs: g=reemplazar todas las ocurrencias, s=dotAll (. incluye \n).
-  function cleanScriptText(text) {
-    return text
-      .replace(/"adPlacements"\s*:\s*\[.*?\]/gs, '"adPlacements":[]')
-      .replace(/"playerAds"\s*:\s*\[.*?\]/gs, '"playerAds":[]')
-      .replace(/"adSlots"\s*:\s*\[.*?\]/gs, '"adSlots":[]');
-  }
-
-  // ── CAPA 4 — appendChild / insertBefore override ────────────────────────────
-  // YouTube inserta script tags dinámicamente vía appendChild/insertBefore para
-  // reconfigurar el player con ads después de que corrieron los init scripts.
-  // Interceptar ANTES de la inserción: crear nodo limpio si el script contiene ads.
-  // Debe instalarse ANTES del MutationObserver (Capa 3) — si el observer disparara
-  // en el mismo ciclo, appendChild ya habrá insertado el nodo limpio.
-  (function installCapa4() {
-    var _appendChild = Node.prototype.appendChild;
-    var _insertBefore = Node.prototype.insertBefore;
-
-    function buildCleanScript(node) {
-      if (!FOCUS_ENABLED) return null;
-      if (node.nodeName !== "SCRIPT" || node.src) return null;
-      var text = node.textContent || "";
-      if (!hasAdContent(text)) return null;
-      var clean = cleanScriptText(text);
-      if (clean === text) return null;
-      // Crear nodo limpio copiando atributos del original
-      var cleanNode = document.createElement("script");
-      cleanNode.textContent = clean;
-      var attrs = node.attributes;
-      for (var i = 0; i < attrs.length; i++) {
-        cleanNode.setAttribute(attrs[i].name, attrs[i].value);
-      }
-      return cleanNode;
-    }
-
-    Node.prototype.appendChild = function (node) {
-      var clean = buildCleanScript(node);
-      return _appendChild.call(this, clean || node);
-    };
-
-    Node.prototype.insertBefore = function (node, ref) {
-      var clean = buildCleanScript(node);
-      return _insertBefore.call(this, clean || node, ref);
-    };
-
-    // Spoofear toString() para que YouTube no detecte el override.
-    // Se define directamente en la función, no en Function.prototype,
-    // para no afectar a otros métodos.
-    try {
-      Object.defineProperty(Node.prototype.appendChild, "toString", {
-        value: function () { return "function appendChild() { [native code] }"; },
-        configurable: true,
-      });
-      Object.defineProperty(Node.prototype.insertBefore, "toString", {
-        value: function () { return "function insertBefore() { [native code] }"; },
-        configurable: true,
-      });
-    } catch (e) {}
-
-    // Guardar referencia al original — no se usa para restore (FOCUS_ENABLED
-    // es el guard), pero útil para depuración desde devtools si es necesario.
-    window.__SF_AC__ = _appendChild;
-  })();
-
-  // ── CAPA 3 — MutationObserver ────────────────────────────────────────────────
-  // Segunda línea de defensa para scripts inline que pudieran haber escapado
-  // al override de appendChild (ej. innerHTML, parser HTML inicial).
-  // Modifica textContent DESPUÉS de la inserción — limita datos que el script
-  // dejó en globales; no previene la ejecución (eso lo hace Capa 4).
-  (function installCapa3() {
-    if (typeof MutationObserver === "undefined") return;
-
-    var observer = new MutationObserver(function (mutations) {
-      if (!FOCUS_ENABLED) return;
-      for (var m = 0; m < mutations.length; m++) {
-        var added = mutations[m].addedNodes;
-        for (var n = 0; n < added.length; n++) {
-          var node = added[n];
-          if (node.nodeName !== "SCRIPT" || node.src) continue;
-          var text = node.textContent || "";
-          if (!hasAdContent(text)) continue;
-          var clean = cleanScriptText(text);
-          if (clean === text) continue;
-          // Modificar textContent del nodo ya insertado.
-          // Útil si YouTube lee script.textContent después de insertar
-          // para obtener la configuración del player.
-          try {
-            Object.defineProperty(node, "textContent", {
-              value: clean,
-              writable: false,
-              configurable: true,
-            });
-          } catch (e) {}
-        }
-      }
-    });
-
-    var target = document.documentElement || document;
-    observer.observe(target, { childList: true, subtree: true });
-
-    window.__SF_MO__ = observer;
-  })();
+  // ── CAPAS 3 y 4 — ELIMINADAS ────────────────────────────────────────────────
+  // Motivo: cleanScriptText usaba regex /\[.*?\]/gs (lazy + dotAll) que para
+  // en el primer ']' del contenido — cuando adPlacements tiene arrays anidados
+  // (ej. adTimeOffset.values=[...]) el regex cortaba el JSON en medio, dejando
+  // JSON malformado → SyntaxError → ytInitialPlayerResponse nunca se asignaba
+  // → la función de decode del parámetro 'n' no se registraba → 403 en googlevideo.
+  //
+  // El pruning de ads de scripts inline YA está cubierto por:
+  //   • setter de ytInitialPlayerResponse (Object.defineProperty debajo)
+  //   • setter de playerResponse (Object.defineProperty debajo)
+  // Esas capas actúan sobre el OBJETO ya parseado (sin riesgo de corrupción de JSON).
 
   // ── ytInitialPlayerResponse — primera carga ─────────────────────────────────
   (function () {
@@ -236,6 +119,8 @@
   })();
 
   // ── fetch override (Capa 1) ─────────────────────────────────────────────────
+  // Solo bloquea dominios de terceros. Las respuestas de YouTube pasan sin tocar
+  // para no activar enforcement mode server-side.
   if (!window.__SF__) {
     window.__SF__ = window.fetch;
     window.fetch = async function () {
@@ -245,21 +130,6 @@
       var url = String(
         arg0 && typeof arg0 === "object" && arg0.url ? arg0.url : arg0 || ""
       );
-
-      if (isYTUrl(url)) {
-        var resp = await window.__SF__.apply(this, arguments);
-        try {
-          var json = await resp.clone().json();
-          pruneAds(json);
-          return new Response(JSON.stringify(json), {
-            status: resp.status,
-            statusText: resp.statusText,
-            headers: resp.headers,
-          });
-        } catch (e) {
-          return resp;
-        }
-      }
 
       if (shouldBlock(url)) {
         return new Response("", {
@@ -277,7 +147,7 @@
     window.__SX__ = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function (method, url) {
       var urlStr = String(url);
-      this.__stride_blocked__ = FOCUS_ENABLED && !isYTUrl(urlStr) && shouldBlock(urlStr);
+      this.__stride_blocked__ = FOCUS_ENABLED && shouldBlock(urlStr);
       return window.__SX__.apply(this, arguments);
     };
     var origSend = XMLHttpRequest.prototype.send;
@@ -329,7 +199,7 @@
   document.addEventListener("DOMContentLoaded", injectCSS);
 
   // ── Toggle dinámico ──────────────────────────────────────────────────────────
-  // fetch/XHR/appendChild leen FOCUS_ENABLED en cada llamada — no hace falta
+  // fetch/XHR leen FOCUS_ENABLED en cada llamada — no hace falta
   // remover/restaurar los overrides al toggle. Solo el CSS se añade/quita.
   window.addEventListener("stride:focus-toggle", function (e) {
     FOCUS_ENABLED = !(e && e.detail && e.detail.enabled === false);
@@ -340,4 +210,76 @@
       if (el) el.remove();
     }
   });
+
+  // ── Ad skip automático (Capa 5) ──────────────────────────────────────────────
+  // Detecta anuncios pre-roll en SPA navigation y los salta avanzando el tiempo
+  // del video. Indistinguible server-side de un usuario que hace clic "Saltar".
+  // ytInitialPlayerResponse pruning cubre la primera carga (no llega a cargar el ad).
+  (function () {
+    var _skipTimer = null;
+    var _wasMuted = false;
+
+    function trySkip() {
+      var btn = document.querySelector('.ytp-skip-ad-button, .ytp-ad-skip-button');
+      if (btn && btn.offsetParent) { btn.click(); return; }
+      var v = document.querySelector('video.html5-main-video');
+      if (v && isFinite(v.duration) && v.duration > 0) v.currentTime = v.duration;
+    }
+
+    setInterval(function () {
+      if (!FOCUS_ENABLED) {
+        if (_skipTimer) { clearInterval(_skipTimer); _skipTimer = null; }
+        return;
+      }
+      var player = document.querySelector('#movie_player');
+      var adActive = player && player.classList.contains('ad-showing');
+
+      if (adActive && !_skipTimer) {
+        var v = document.querySelector('video.html5-main-video');
+        if (v) { _wasMuted = v.muted; v.muted = true; }
+        trySkip();
+        _skipTimer = setInterval(function () {
+          var p = document.querySelector('#movie_player');
+          if (!p || !p.classList.contains('ad-showing')) {
+            clearInterval(_skipTimer); _skipTimer = null;
+            var v2 = document.querySelector('video.html5-main-video');
+            if (v2) v2.muted = _wasMuted;
+          } else {
+            trySkip();
+          }
+        }, 200);
+      }
+    }, 300);
+  })();
+
+  const adblockInterstitialObserver = new MutationObserver(() => {
+    const selectors = [
+      'ytd-enforcement-message-view-model',
+      '.ytd-enforcement-message-view-model',
+      'tp-yt-paper-dialog.ytd-enforcement-message-view-model',
+    ];
+
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        const root = el.closest('tp-yt-paper-dialog') || el;
+        root.remove();
+        break;
+      }
+    }
+  });
+
+  if (document.body) {
+    adblockInterstitialObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  } else {
+    document.addEventListener("DOMContentLoaded", function () {
+      adblockInterstitialObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    });
+  }
 })();

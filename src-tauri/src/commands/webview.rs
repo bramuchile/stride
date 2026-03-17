@@ -277,7 +277,12 @@ pub async fn create_panel_webview<R: Runtime>(
                 _ => true,
             }
         })
-        .auto_resize();
+        .auto_resize()
+        // Inyectar siempre: hace que navigator.userAgentData reporte "Google Chrome"
+        // en lugar de "Microsoft Edge" (WebView2). YouTube's player JS lee esta API
+        // para inicializar su pipeline de streaming y el transform del parámetro 'n'.
+        // Sin esto, las peticiones a googlevideo.com reciben 403.
+        .initialization_script(include_str!("./chrome_compat.js"));
 
     // Inyectar script de Modo Focus si está activo.
     // El script embebe el listado actual de dominios como JSON — nuevos WebViews
