@@ -195,30 +195,35 @@ pub async fn create_panel_webview<R: Runtime>(
         .enable_clipboard_access()
         // FIX 3: Deshabilitar zoom con Ctrl+Scroll en paneles web
         .zoom_hotkeys_enabled(false)
-        // Popups OAuth: Google OAuth se abre como popup nativo (NewWindowResponse::Allow).
-        // WebView2 mantiene window.opener automáticamente → Google GSI puede postMessage.
-        // Links externos van al navegador del sistema. URLs peligrosas se bloquean.
-        .on_new_window(move |url, _features| {
+        // Popups: WebView2 dejar que cree el popup nativo (NewWindowResponse::Allow)
+        // cuando la solicitud es un verdadero popup (window.open con tamaño/posición).
+        // WebView2 mantiene window.opener automáticamente → postMessage y OAuth fluyen normal.
+        // Links con target=_blank (navegación simple) van al navegador del sistema.
+        // URLs peligrosas se bloquean siempre.
+        .on_new_window(move |url, features| {
             let url_str = url.to_string();
-            eprintln!("[STRIDE-OAUTH] on_new_window url={}", &url_str[..url_str.len().min(80)]);
+            eprintln!("[STRIDE-POPUP] on_new_window url={}", &url_str[..url_str.len().min(80)]);
 
             // URLs peligrosas: bloquear siempre
             if url_str.starts_with("javascript:") || url_str.starts_with("data:") {
-                eprintln!("[STRIDE-OAUTH] blocked dangerous url");
+                eprintln!("[STRIDE-POPUP] blocked dangerous url");
                 return NewWindowResponse::Deny;
             }
 
-            // Google OAuth: dejar que WebView2 cree el popup nativo.
-            // NewWindowResponse::Allow preserva window.opener automáticamente.
-            let is_google_oauth = url_str.contains("accounts.google.com")
+            // Si la página solicitó explícitamente un popup (window.open con width/height)
+            // o es un flujo OAuth que necesita window.opener → dejar que WebView2 lo cree nativamente.
+            // Esto cubre: Google OAuth, Notion pickers, GitHub auth, Slack OAuth, etc.
+            let is_popup_request = features.size().is_some() || features.position().is_some();
+            let is_oauth_url = url_str.contains("accounts.google.com")
                 || url_str.contains("google.com/o/oauth2");
-            if is_google_oauth {
-                eprintln!("[STRIDE-OAUTH] allowing native popup for Google OAuth");
+
+            if is_popup_request || is_oauth_url {
+                eprintln!("[STRIDE-POPUP] allowing native popup (popup={}, oauth={})", is_popup_request, is_oauth_url);
                 return NewWindowResponse::Allow;
             }
 
-            // Resto (links externos, etc.): abrir en navegador del sistema
-            eprintln!("[STRIDE-OAUTH] opening external url in browser");
+            // Navegación simple (target=_blank, window.open sin features): abrir en navegador del sistema
+            eprintln!("[STRIDE-POPUP] opening external url in browser");
             let _ = app_for_opener.opener().open_url(&url_str, None::<&str>);
             NewWindowResponse::Deny
         })

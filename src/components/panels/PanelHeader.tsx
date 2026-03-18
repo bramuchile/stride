@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { ChevronLeft, ChevronRight, RotateCcw, Star, LayoutPanelLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Star } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AddressBar } from "./AddressBar";
@@ -15,6 +15,8 @@ interface Props {
   onAddPanelBelow?: (type: PanelType, widgetId?: WidgetId) => void;
   onAddColumn?: () => void;
   isLastColumn?: boolean;
+  onRemovePanel?: () => void;
+  canRemove?: boolean;
 }
 
 function getDomain(url?: string): string {
@@ -47,7 +49,8 @@ function getFaviconUrl(url?: string): string | null {
   }
 }
 
-export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn }: Props) {
+export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn, onRemovePanel, canRemove }: Props) {
+  const [headerHovered, setHeaderHovered] = useState(false);
   const [showAddressBar, setShowAddressBar] = useState(false);
   const [showSplitPopover, setShowSplitPopover] = useState(false);
   const splitPopoverRef = useRef<HTMLDivElement>(null);
@@ -59,6 +62,29 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
   const [showBookmarkPopup, setShowBookmarkPopup] = useState(false);
   const [bookmarkTitle, setBookmarkTitle] = useState("");
   const popupRef = useRef<HTMLDivElement>(null);
+  // Beacon dots — tutorial de botones de división
+  const [hintSeen, setHintSeen] = useState(() => !!localStorage.getItem("stride_split_hint_seen"));
+  const [activeBeacon, setActiveBeacon] = useState<"column" | "row" | null>(null);
+  // Beacon estrella — tutorial de favoritos (aparece tras dismissear el hint de split)
+  const [bookmarkBeaconVisible, setBookmarkBeaconVisible] = useState(() =>
+    !!localStorage.getItem("stride_split_hint_seen") && !localStorage.getItem("stride_bookmark_hint_seen")
+  );
+
+  // Sincronizar beacon de split cuando NewTabPage lo dismissea
+  useEffect(() => {
+    const onSplitDismissed = () => {
+      setHintSeen(true);
+      setActiveBeacon(null);
+      setBookmarkBeaconVisible(!localStorage.getItem("stride_bookmark_hint_seen"));
+    };
+    const onBookmarkDismissed = () => setBookmarkBeaconVisible(false);
+    window.addEventListener("stride:split-hint-dismissed", onSplitDismissed);
+    window.addEventListener("stride:bookmark-hint-dismissed", onBookmarkDismissed);
+    return () => {
+      window.removeEventListener("stride:split-hint-dismissed", onSplitDismissed);
+      window.removeEventListener("stride:bookmark-hint-dismissed", onBookmarkDismissed);
+    };
+  }, []);
   const updatePanel = useUpdatePanel();
   const { setWebviewUrl } = useWorkspaceStore();
   const { bookmarks, isBookmarked, getBookmark, save: saveBookmark, remove: removeBookmark } = useBookmarks();
@@ -167,10 +193,31 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
     };
   }, [showSplitPopover]);
 
+  // Cerrar tooltip beacon al click fuera o Escape
+  useEffect(() => {
+    if (!activeBeacon) return;
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest("[data-beacon-tooltip]")) setActiveBeacon(null);
+    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setActiveBeacon(null); };
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [activeBeacon]);
+
+  const dismissHint = () => {
+    localStorage.setItem("stride_split_hint_seen", "1");
+    setHintSeen(true);
+    setActiveBeacon(null);
+  };
+
   // Ocultar/mostrar el WebView del panel cuando hay un overlay flotante.
   // WebView2 es una ventana nativa y siempre se renderiza encima del HTML,
   // ignorando z-index. Solución: hide() mientras el overlay esté abierto.
-  const isOverlayOpen = showBookmarkPopup || showAddressBar || showSplitPopover;
+  const isOverlayOpen = showBookmarkPopup || showAddressBar || showSplitPopover || activeBeacon !== null;
   useEffect(() => {
     const panelId = panel.id;
     if (isOverlayOpen) {
@@ -186,13 +233,11 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
     setShowBookmarkPopup(true);
   };
 
-  const handleWidgetBtn = () => {
-    window.dispatchEvent(new CustomEvent("stride:edit-panels"));
-  };
-
   return (
     <div
       className="relative flex flex-shrink-0 items-center gap-2 px-[10px]"
+      onMouseEnter={() => setHeaderHovered(true)}
+      onMouseLeave={() => setHeaderHovered(false)}
       style={{
         height: "32px",
         background: "var(--surface)",
@@ -336,28 +381,46 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
           </button>
 
           {/* Estrella — guardar marcador */}
-          <button
-            onClick={handleStarClick}
-            style={{
-              width: 22, height: 22,
-              background: "transparent", border: "none",
-              color: bookmarked ? "var(--accent)" : "var(--text3)",
-              cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              borderRadius: 4, flexShrink: 0,
-              filter: bookmarked ? "drop-shadow(0 0 4px rgba(124,106,247,0.5))" : "none",
-              transition: "color 0.15s, filter 0.15s",
-            }}
-            title={bookmarked ? "Guardado en marcadores" : "Guardar marcador"}
-            onMouseEnter={(e) => {
-              if (!bookmarked) (e.currentTarget as HTMLElement).style.color = "var(--text2)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = bookmarked ? "var(--accent)" : "var(--text3)";
-            }}
-          >
-            <Star size={13} strokeWidth={2} fill={bookmarked ? "var(--accent)" : "none"} />
-          </button>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <button
+              onClick={handleStarClick}
+              style={{
+                width: 22, height: 22,
+                background: bookmarkBeaconVisible ? "rgba(124,106,245,0.18)" : "transparent",
+                border: bookmarkBeaconVisible ? "1px solid rgba(124,106,245,0.55)" : "none",
+                color: bookmarked ? "var(--accent)" : "var(--text3)",
+                cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: 4,
+                filter: bookmarked ? "drop-shadow(0 0 4px rgba(124,106,247,0.5))" : "none",
+                transition: "color 0.15s, filter 0.15s, background 0.15s, border-color 0.15s",
+              }}
+              title={bookmarked ? "Guardado en marcadores" : "Guardar marcador"}
+              onMouseEnter={(e) => {
+                if (!bookmarked) (e.currentTarget as HTMLElement).style.color = "var(--text2)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.color = bookmarked ? "var(--accent)" : "var(--text3)";
+              }}
+            >
+              <Star size={13} strokeWidth={2} fill={bookmarked ? "var(--accent)" : "none"} />
+            </button>
+
+            {/* Beacon pulsante — visible durante el hint de bookmarks */}
+            {bookmarkBeaconVisible && (
+              <>
+                <style>{`@keyframes ph-beacon-pulse { 0%{transform:scale(1);opacity:0.9} 100%{transform:scale(2.4);opacity:0} }`}</style>
+                <div style={{ position: "absolute", top: -4, right: -4, width: 8, height: 8, pointerEvents: "none", zIndex: 10 }}>
+                  <div style={{
+                    position: "absolute", inset: 0, borderRadius: "50%",
+                    background: "rgba(124,106,245,0.55)",
+                    animation: "ph-beacon-pulse 2.5s infinite ease-out",
+                  }} />
+                  <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#7c6af5" }} />
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Popup marcador */}
           {showBookmarkPopup && (
@@ -497,6 +560,52 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
                       stroke="currentColor" strokeWidth="1.2"/>
                   </svg>
                 </button>
+
+                {/* Beacon dot — btn-split-h */}
+                {!hintSeen && (
+                  <div
+                    style={{ position: "absolute", top: -4, right: -4, width: 8, height: 8, cursor: "pointer", zIndex: 10 }}
+                    onClick={(e) => { e.stopPropagation(); setActiveBeacon(activeBeacon === "row" ? null : "row"); }}
+                    data-beacon-tooltip
+                  >
+                    <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#7c6af5",
+                      animation: "beacon-ring 2.5s infinite", opacity: 0 }} />
+                    <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#7c6af5" }} />
+                    <style>{`@keyframes beacon-ring { 0%{transform:scale(1);opacity:0.9} 100%{transform:scale(2.4);opacity:0} }`}</style>
+                  </div>
+                )}
+
+                {/* Tooltip beacon fila */}
+                {activeBeacon === "row" && (
+                  <div
+                    data-beacon-tooltip
+                    style={{
+                      position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 200,
+                      background: "#17152a", border: "1px solid rgba(124,106,245,0.25)",
+                      borderRadius: 10, padding: "12px 13px", width: 205,
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.75)", marginBottom: 5 }}>
+                      Agregar fila
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 10, lineHeight: 1.5 }}>
+                      Divide el panel en dos filas para mayor densidad de información.
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>2 de 2</span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={dismissHint} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.3)", padding: "3px 6px" }}>
+                          Omitir
+                        </button>
+                        <button onClick={dismissHint} style={{ background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 11, color: "#fff", padding: "3px 10px", borderRadius: 5, fontWeight: 600 }}>
+                          Entendido
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Popover de selección de tipo */}
                 {showSplitPopover && onAddPanelBelow && (
                   <div
@@ -552,20 +661,105 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
 
               {/* Botón añadir columna — solo en la última columna */}
               {isLastColumn && onAddColumn && (
+                <div style={{ position: "relative" }}>
+                  <button
+                    onClick={onAddColumn}
+                    title="Añadir columna"
+                    style={{
+                      width: 22, height: 22,
+                      background: "transparent", border: "none",
+                      color: "var(--text3)", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      borderRadius: 4, flexShrink: 0, transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.background = "var(--elevated)";
+                      el.style.color = "var(--accent)";
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.background = "transparent";
+                      el.style.color = "var(--text3)";
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                      <rect x="1" y="1" width="6" height="11" rx="1.5"
+                        stroke="currentColor" strokeWidth="1.2"/>
+                      <rect x="9" y="4" width="3" height="5" rx="1"
+                        stroke="currentColor" strokeWidth="1.2"
+                        strokeDasharray="2 1"/>
+                      <line x1="10.5" y1="5.5" x2="10.5" y2="7.5"
+                        stroke="currentColor" strokeWidth="1.2"/>
+                      <line x1="9.5" y1="6.5" x2="11.5" y2="6.5"
+                        stroke="currentColor" strokeWidth="1.2"/>
+                    </svg>
+                  </button>
+
+                  {/* Beacon dot — btn-split-v */}
+                  {!hintSeen && (
+                    <div
+                      style={{ position: "absolute", top: -4, right: -4, width: 8, height: 8, cursor: "pointer", zIndex: 10 }}
+                      onClick={(e) => { e.stopPropagation(); setActiveBeacon(activeBeacon === "column" ? null : "column"); }}
+                      data-beacon-tooltip
+                    >
+                      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#7c6af5",
+                        animation: "beacon-ring 2.5s infinite 0.4s", opacity: 0 }} />
+                      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#7c6af5" }} />
+                    </div>
+                  )}
+
+                  {/* Tooltip beacon columna */}
+                  {activeBeacon === "column" && (
+                    <div
+                      data-beacon-tooltip
+                      style={{
+                        position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 200,
+                        background: "#17152a", border: "1px solid rgba(124,106,245,0.25)",
+                        borderRadius: 10, padding: "12px 13px", width: 205,
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.75)", marginBottom: 5 }}>
+                        Dividir en columnas
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 10, lineHeight: 1.5 }}>
+                        Abre un segundo panel en paralelo. Navega dos sitios a la vez.
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>1 de 2</span>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={dismissHint} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.3)", padding: "3px 6px" }}>
+                            Omitir
+                          </button>
+                          <button onClick={() => setActiveBeacon("row")} style={{ background: "var(--accent)", border: "none", cursor: "pointer", fontSize: 11, color: "#fff", padding: "3px 10px", borderRadius: 5, fontWeight: 600 }}>
+                            Siguiente →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Botón cerrar panel */}
+              {canRemove && onRemovePanel && (
                 <button
-                  onClick={onAddColumn}
-                  title="Añadir columna"
+                  onClick={onRemovePanel}
+                  title="Cerrar panel"
                   style={{
                     width: 22, height: 22,
                     background: "transparent", border: "none",
                     color: "var(--text3)", cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     borderRadius: 4, flexShrink: 0, transition: "all 0.15s",
+                    opacity: headerHovered ? 1 : 0,
+                    pointerEvents: headerHovered ? "auto" : "none",
                   }}
                   onMouseEnter={(e) => {
                     const el = e.currentTarget as HTMLElement;
-                    el.style.background = "var(--elevated)";
-                    el.style.color = "var(--accent)";
+                    el.style.background = "rgba(239,68,68,0.12)";
+                    el.style.color = "var(--red)";
                   }}
                   onMouseLeave={(e) => {
                     const el = e.currentTarget as HTMLElement;
@@ -573,50 +767,15 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
                     el.style.color = "var(--text3)";
                   }}
                 >
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <rect x="1" y="1" width="6" height="11" rx="1.5"
-                      stroke="currentColor" strokeWidth="1.2"/>
-                    <rect x="9" y="4" width="3" height="5" rx="1"
-                      stroke="currentColor" strokeWidth="1.2"
-                      strokeDasharray="2 1"/>
-                    <line x1="10.5" y1="5.5" x2="10.5" y2="7.5"
-                      stroke="currentColor" strokeWidth="1.2"/>
-                    <line x1="9.5" y1="6.5" x2="11.5" y2="6.5"
-                      stroke="currentColor" strokeWidth="1.2"/>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                 </button>
               )}
             </>
           )}
 
-          {/* Widget btn */}
-          <button
-            onClick={handleWidgetBtn}
-            className="flex-shrink-0 flex items-center gap-1 transition-all"
-            style={{
-              height: 20, padding: "0 8px",
-              borderRadius: 5,
-              background: "var(--accent-dim)",
-              border: "1px solid rgba(124,106,247,0.2)",
-              fontSize: 9, color: "var(--accent2)",
-              fontFamily: "'Geist Mono', monospace",
-              cursor: "pointer",
-            }}
-            title="Configurar widgets"
-            onMouseEnter={(e) => {
-              const el = e.currentTarget as HTMLElement;
-              el.style.background = "var(--accent-glow)";
-              el.style.borderColor = "rgba(124,106,247,0.4)";
-            }}
-            onMouseLeave={(e) => {
-              const el = e.currentTarget as HTMLElement;
-              el.style.background = "var(--accent-dim)";
-              el.style.borderColor = "rgba(124,106,247,0.2)";
-            }}
-          >
-            <LayoutPanelLeft size={10} strokeWidth={2} />
-            widget
-          </button>
         </>
       )}
     </div>

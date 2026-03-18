@@ -9,17 +9,21 @@ interface WorkspaceStore {
   webviewMap: WebviewMap;
   // URL actualmente cargada en cada webview (para detectar cambios y navegar)
   webviewUrlMap: { [panelId: string]: string };
+  // Oculta las barras de panel para maximizar el área de contenido
+  presentationMode: boolean;
 
   setActiveWorkspace: (id: string) => void;
   registerWebview: (panelId: string, label: string) => void;
   unregisterWebview: (panelId: string) => void;
   setWebviewUrl: (panelId: string, url: string) => void;
+  setPresentationMode: (val: boolean) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   activeWorkspaceId: null,
   webviewMap: {},
   webviewUrlMap: {},
+  presentationMode: false,
 
   setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
 
@@ -39,4 +43,6 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
     set((state) => ({
       webviewUrlMap: { ...state.webviewUrlMap, [panelId]: url },
     })),
+
+  setPresentationMode: (val) => set({ presentationMode: val }),
 }));

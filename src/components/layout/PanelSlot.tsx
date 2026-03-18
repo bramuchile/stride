@@ -18,11 +18,86 @@ interface Props {
   onAddPanelBelow?: (type: PanelType, widgetId?: WidgetId) => void;
   onAddColumn?: () => void;
   isLastColumn?: boolean;
+  onRemovePanel?: () => void;
+  canRemove?: boolean;
 }
 
-export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn }: Props) {
+const WIDGET_LABELS: Record<string, { icon: string; label: string }> = {
+  notes:        { icon: "📝", label: "Notas" },
+  scratchpad:   { icon: "📝", label: "Notas rápidas" },
+  "next-meeting": { icon: "📅", label: "Próxima reunión" },
+  weather:      { icon: "🌤", label: "Clima" },
+};
+
+function WidgetHeader({
+  panel,
+  dynamicMode,
+  onRemovePanel,
+  canRemove,
+}: {
+  panel: Panel;
+  dynamicMode?: boolean;
+  onRemovePanel?: () => void;
+  canRemove?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const meta = WIDGET_LABELS[panel.widget_id ?? ""] ?? { icon: "🧩", label: panel.widget_id ?? "Widget" };
+
+  return (
+    <div
+      className="flex flex-shrink-0 items-center gap-2 px-[10px]"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        height: "32px",
+        background: "var(--surface)",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{meta.icon}</span>
+      <span
+        className="flex-1 truncate min-w-0"
+        style={{ fontSize: 11, color: "var(--text2)", fontWeight: 500 }}
+      >
+        {meta.label}
+      </span>
+      {dynamicMode && canRemove && onRemovePanel && (
+        <button
+          onClick={onRemovePanel}
+          title="Cerrar panel"
+          style={{
+            width: 22, height: 22,
+            background: "transparent", border: "none",
+            color: "var(--text3)", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            borderRadius: 4, flexShrink: 0, transition: "all 0.15s",
+            opacity: hovered ? 1 : 0,
+            pointerEvents: hovered ? "auto" : "none",
+          }}
+          onMouseEnter={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.background = "rgba(239,68,68,0.12)";
+            el.style.color = "var(--red)";
+          }}
+          onMouseLeave={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.background = "transparent";
+            el.style.color = "var(--text3)";
+          }}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <line x1="1" y1="1" x2="9" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <line x1="9" y1="1" x2="1" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn, onRemovePanel, canRemove }: Props) {
   const [overlayCollapsed, setOverlayCollapsed] = useState(false);
-  const { webviewMap, setWebviewUrl } = useWorkspaceStore();
+  const { webviewMap, setWebviewUrl, presentationMode } = useWorkspaceStore();
   const updatePanel = useUpdatePanel();
 
   // Navegación desde el new tab page (panel sin URL)
@@ -89,13 +164,22 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
     >
       {panel.type === "WEB" ? (
         <>
-          <PanelHeader
-            panel={panel}
-            dynamicMode={dynamicMode}
-            onAddPanelBelow={onAddPanelBelow}
-            onAddColumn={onAddColumn}
-            isLastColumn={isLastColumn}
-          />
+          <div style={{
+            overflow: "hidden",
+            height: presentationMode ? 0 : 32,
+            flexShrink: 0,
+            transition: "height 0.2s ease",
+          }}>
+            <PanelHeader
+              panel={panel}
+              dynamicMode={dynamicMode}
+              onAddPanelBelow={onAddPanelBelow}
+              onAddColumn={onAddColumn}
+              isLastColumn={isLastColumn}
+              onRemovePanel={onRemovePanel}
+              canRemove={canRemove}
+            />
+          </div>
 
           {/* Overlay top */}
           {hasOverlay && panel.overlay_position === "top" && (
@@ -141,7 +225,22 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
           )}
         </>
       ) : (
-        <WidgetPanel panel={panel} />
+        <>
+          <div style={{
+            overflow: "hidden",
+            height: presentationMode ? 0 : 32,
+            flexShrink: 0,
+            transition: "height 0.2s ease",
+          }}>
+            <WidgetHeader
+              panel={panel}
+              dynamicMode={dynamicMode}
+              onRemovePanel={onRemovePanel}
+              canRemove={canRemove}
+            />
+          </div>
+          <WidgetPanel panel={panel} />
+        </>
       )}
 
     </div>

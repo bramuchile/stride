@@ -1,4 +1,5 @@
-export type LayoutType = "1col" | "2col" | "3col" | "2x2" | "dynamic";
+export type LayoutType = "dynamic";
+export type LayoutTemplate = "free" | "double" | "triple" | "quad";
 export type PanelType = "WEB" | "WIDGET";
 export type WidgetId = "scratchpad" | "next-meeting" | "notes" | "weather";
 

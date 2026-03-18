@@ -10,32 +10,10 @@ import type { Panel, PanelLayoutInfo, DynamicLayout } from "@/types";
 const delay = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
 /**
- * Calcula custom_x_frac / custom_width_frac para cada panel a partir de
- * sus width_frac guardados en DB. Devuelve un mapa panelId → {x, w}.
- * Si ningún panel tiene width_frac, devuelve mapa vacío (se usará el layout por defecto).
- */
-function buildFracMap(
-  webPanels: Panel[],
-  layout: string
-): Record<string, { x_frac: number; w_frac: number }> {
-  if (layout === "2x2" || !webPanels.some((p) => p.width_frac != null)) return {};
-  const fracs = webPanels.map((p) => p.width_frac ?? 1 / webPanels.length);
-  const total = fracs.reduce((s, f) => s + f, 0);
-  const norm = fracs.map((f) => f / total);
-  const map: Record<string, { x_frac: number; w_frac: number }> = {};
-  let cumX = 0;
-  webPanels.forEach((p, i) => {
-    map[p.id] = { x_frac: cumX, w_frac: norm[i] };
-    cumX += norm[i];
-  });
-  return map;
-}
-
-/**
  * Obtiene las dimensiones lógicas del contenedor de paneles usando la API de Tauri.
  * containerH = windowH - HEADER_HEIGHT: espacio que Rust usa como total_avail_y.
  * cssContainerH = windowH - TITLEBAR_HEIGHT: altura real del contenedor CSS de paneles.
- * Los RowResizerss usan márgenes negativos con contribución neta 0 al flex layout,
+ * Los RowResizers usan márgenes negativos con contribución neta 0 al flex layout,
  * por lo que los slots comparten el 100% de cssContainerH sin restar resizers.
  */
 async function getContainerDimensions(): Promise<{ containerW: number; containerH: number; cssContainerH: number }> {
@@ -54,13 +32,16 @@ async function getContainerDimensions(): Promise<{ containerW: number; container
 /**
  * Para layout dinámico: calcula fracciones absolutas x/y/w/h para cada panel.
  *
- * Rust aplica: pos.y = HEADER_HEIGHT + y_frac * containerH
- * Queremos:    pos.y = HEADER_HEIGHT + cssSlotY
+ * Rust aplica: pos.y = headerHeight + y_frac * containerH
+ * Queremos:    pos.y = headerHeight + cssSlotY
  * Por tanto:   y_frac = cssSlotY / containerH  (sin sumar PANEL_BAR_HEIGHT)
  *
  * Los slots comparten cssContainerH (= windowH - TITLEBAR_HEIGHT) en proporciones
  * height_frac sin restar resizers, porque los RowResizers tienen marginTop/Bottom
  * negativos con contribución neta 0 al flex layout.
+ *
+ * panelBarHeight: altura de la barra de panel (0 en Modo Presentación, PANEL_BAR_HEIGHT normalmente).
+ * containerHeight debe ser cssContainerH - panelBarHeight.
  */
 function buildDynamicFracMap(
   webPanels: Panel[],
@@ -68,6 +49,7 @@ function buildDynamicFracMap(
   containerWidth: number,
   containerHeight: number,
   cssContainerHeight: number,
+  panelBarHeight: number = PANEL_BAR_HEIGHT,
 ): Record<string, { x_frac: number; w_frac: number; y_frac: number; h_frac: number }> {
   const map: Record<string, { x_frac: number; w_frac: number; y_frac: number; h_frac: number }> = {};
   const panelSet = new Set(webPanels.map((p) => p.id));
@@ -95,7 +77,7 @@ function buildDynamicFracMap(
       // Rust: pos.y = HEADER_HEIGHT + y_frac * containerH = HEADER_HEIGHT + cssSlotY
       //             = TITLEBAR_HEIGHT + cssSlotY + PANEL_BAR_HEIGHT ✓
       const y_frac = cssSlotY / containerHeight;
-      const h_frac = Math.max((cssSlotH - PANEL_BAR_HEIGHT) / containerHeight, 0);
+      const h_frac = Math.max((cssSlotH - panelBarHeight) / containerHeight, 0);
 
       map[dynPanel.panel_id] = { x_frac, w_frac, y_frac, h_frac };
     });
@@ -115,7 +97,10 @@ export function useWebviews(
   activeWorkspaceId: string | null,
   dynamicLayout?: DynamicLayout | null
 ) {
-  const { webviewMap, webviewUrlMap, registerWebview, setWebviewUrl } = useWorkspaceStore();
+  const { webviewMap, webviewUrlMap, registerWebview, setWebviewUrl, presentationMode } = useWorkspaceStore();
+  // Ref para que los handlers siempre lean el valor más reciente sin re-suscribir efectos
+  const presentationModeRef = useRef(presentationMode);
+  presentationModeRef.current = presentationMode;
   // Referencia para detectar cambio de workspace
   const prevWorkspaceRef = useRef<string | null>(null);
   // Ref para que el onResized handler siempre lea el dynamicLayout más reciente
@@ -132,6 +117,10 @@ export function useWebviews(
     const activate = async () => {
       // Ocultar todos los webviews del workspace anterior
       await invoke("hide_all_panel_webviews");
+
+      const isPresentation = presentationModeRef.current;
+      const panelBarH = isPresentation ? 0 : PANEL_BAR_HEIGHT;
+      const headerH = isPresentation ? TITLEBAR_HEIGHT : HEADER_HEIGHT;
 
       const webPanels = panels.filter((p) => p.type === "WEB" && p.url);
 
@@ -157,7 +146,7 @@ export function useWebviews(
           layout,
           position: panel.position,
           sidebarWidth: SIDEBAR_WIDTH,
-          headerHeight: HEADER_HEIGHT,
+          headerHeight: headerH,
           overlayPosition: panel.overlay_position ?? null,
           overlayHeightPct: panel.overlay_height_pct ?? null,
         });
@@ -169,12 +158,11 @@ export function useWebviews(
       }
 
       // Reubicar TODOS los webviews (nuevos y existentes) a sus bounds correctos.
-      // FIX 1: leer desde ref para no usar la variable de closure que causó el re-run.
-      // FIX 2: usar getContainerDimensions() para consistencia con el cálculo de Rust.
       let toResize: PanelLayoutInfo[];
-      if (layout === "dynamic" && dynamicLayoutRef.current) {
-        const { containerW, containerH, cssContainerH } = await getContainerDimensions();
-        const dynMap = buildDynamicFracMap(webPanels, dynamicLayoutRef.current, containerW, containerH, cssContainerH);
+      if (dynamicLayoutRef.current) {
+        const { containerW, cssContainerH } = await getContainerDimensions();
+        const containerH = cssContainerH - panelBarH;
+        const dynMap = buildDynamicFracMap(webPanels, dynamicLayoutRef.current, containerW, containerH, cssContainerH, panelBarH);
         toResize = webPanels.map((p) => ({
           panel_id: p.id,
           position: p.position,
@@ -186,15 +174,8 @@ export function useWebviews(
           custom_height_frac: dynMap[p.id]?.h_frac ?? null,
         }));
       } else {
-        const fracMap = buildFracMap(webPanels, layout);
-        toResize = webPanels.map((p) => ({
-          panel_id: p.id,
-          position: p.position,
-          overlay_position: p.overlay_position ?? null,
-          overlay_height_pct: p.overlay_height_pct ?? null,
-          custom_x_frac: fracMap[p.id]?.x_frac ?? null,
-          custom_width_frac: fracMap[p.id]?.w_frac ?? null,
-        }));
+        // dynamicLayout aún no cargado — no reposicionar, se reposicionará cuando cargue
+        toResize = [];
       }
 
       if (toResize.length > 0) {
@@ -202,7 +183,7 @@ export function useWebviews(
           panels: toResize,
           layout,
           sidebarWidth: SIDEBAR_WIDTH,
-          headerHeight: HEADER_HEIGHT,
+          headerHeight: headerH,
         });
       }
 
@@ -230,9 +211,14 @@ export function useWebviews(
         const webPanels = panels.filter((p) => p.type === "WEB" && webviewMap[p.id]);
         let toResize: PanelLayoutInfo[];
 
-        if (layout === "dynamic" && dynamicLayoutRef.current) {
-          const { containerW, containerH, cssContainerH } = await getContainerDimensions();
-          const dynMap = buildDynamicFracMap(webPanels, dynamicLayoutRef.current, containerW, containerH, cssContainerH);
+        const isPresentation = presentationModeRef.current;
+        const panelBarH = isPresentation ? 0 : PANEL_BAR_HEIGHT;
+        const headerH = isPresentation ? TITLEBAR_HEIGHT : HEADER_HEIGHT;
+
+        if (dynamicLayoutRef.current) {
+          const { containerW, cssContainerH } = await getContainerDimensions();
+          const containerH = cssContainerH - panelBarH;
+          const dynMap = buildDynamicFracMap(webPanels, dynamicLayoutRef.current, containerW, containerH, cssContainerH, panelBarH);
           toResize = webPanels.map((p) => ({
             panel_id: p.id,
             position: p.position,
@@ -244,15 +230,7 @@ export function useWebviews(
             custom_height_frac: dynMap[p.id]?.h_frac ?? null,
           }));
         } else {
-          const fracMap = buildFracMap(webPanels, layout);
-          toResize = webPanels.map((p) => ({
-            panel_id: p.id,
-            position: p.position,
-            overlay_position: p.overlay_position ?? null,
-            overlay_height_pct: p.overlay_height_pct ?? null,
-            custom_x_frac: fracMap[p.id]?.x_frac ?? null,
-            custom_width_frac: fracMap[p.id]?.w_frac ?? null,
-          }));
+          toResize = [];
         }
 
         if (toResize.length > 0) {
@@ -260,7 +238,7 @@ export function useWebviews(
             panels: toResize,
             layout,
             sidebarWidth: SIDEBAR_WIDTH,
-            headerHeight: HEADER_HEIGHT,
+            headerHeight: headerH,
           }).catch(console.error);
         }
       })
@@ -272,6 +250,41 @@ export function useWebviews(
       unlisten?.();
     };
   }, [panels, layout, webviewMap]);
+
+  // Reposicionar WebViews al activar/desactivar Modo Presentación
+  useEffect(() => {
+    if (!dynamicLayoutRef.current) return;
+    const webPanels = panels.filter((p) => p.type === "WEB" && webviewMap[p.id]);
+    if (webPanels.length === 0) return;
+
+    const panelBarH = presentationMode ? 0 : PANEL_BAR_HEIGHT;
+    const headerH = presentationMode ? TITLEBAR_HEIGHT : HEADER_HEIGHT;
+
+    const doResize = async () => {
+      const { containerW, cssContainerH } = await getContainerDimensions();
+      const containerH = cssContainerH - panelBarH;
+      const dynMap = buildDynamicFracMap(webPanels, dynamicLayoutRef.current!, containerW, containerH, cssContainerH, panelBarH);
+      const toResize: PanelLayoutInfo[] = webPanels.map((p) => ({
+        panel_id: p.id,
+        position: p.position,
+        overlay_position: p.overlay_position ?? null,
+        overlay_height_pct: p.overlay_height_pct ?? null,
+        custom_x_frac: dynMap[p.id]?.x_frac ?? null,
+        custom_width_frac: dynMap[p.id]?.w_frac ?? null,
+        custom_y_frac: dynMap[p.id]?.y_frac ?? null,
+        custom_height_frac: dynMap[p.id]?.h_frac ?? null,
+      }));
+      await invoke("resize_panel_webviews", {
+        panels: toResize,
+        layout,
+        sidebarWidth: SIDEBAR_WIDTH,
+        headerHeight: headerH,
+      });
+    };
+
+    doResize().catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presentationMode]);
 
   // FIX 6: Persistir URL cuando el usuario navega dentro de un panel WEB
   useEffect(() => {

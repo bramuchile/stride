@@ -270,7 +270,6 @@ export function DynamicPanelGrid({
   const layoutRef = useRef(dynamicLayout);
   layoutRef.current = dynamicLayout;
 
-  const [hoveredPanelId, setHoveredPanelId] = useState<string | null>(null);
   // Para columnas vacías: qué columna tiene el popover abierto
   const [emptyColPopover, setEmptyColPopover] = useState<number | null>(null);
 
@@ -478,9 +477,7 @@ export function DynamicPanelGrid({
                 return (
                   <React.Fragment key={dynPanel.panel_id}>
                     <div
-                      style={{ flex: dynPanel.height_frac, minHeight: 0, overflow: "hidden", position: "relative" }}
-                      onMouseEnter={() => setHoveredPanelId(dynPanel.panel_id)}
-                      onMouseLeave={() => setHoveredPanelId(null)}
+                      style={{ flex: dynPanel.height_frac, minHeight: 0, overflow: "hidden" }}
                     >
                       <PanelSlot
                         panel={panel}
@@ -491,45 +488,9 @@ export function DynamicPanelGrid({
                         }}
                         onAddColumn={colIdx === lastColIdx ? onAddColumn : undefined}
                         isLastColumn={colIdx === lastColIdx}
+                        onRemovePanel={() => onRemovePanel(dynPanel.panel_id).catch(console.error)}
+                        canRemove={canRemove}
                       />
-                      {canRemove && hoveredPanelId === dynPanel.panel_id && (
-                        <button
-                          onClick={() => onRemovePanel(dynPanel.panel_id).catch(console.error)}
-                          onMouseEnter={(e) => {
-                            const el = e.currentTarget;
-                            el.style.background = "rgba(239,68,68,0.8)";
-                            el.style.borderColor = "rgba(239,68,68,0.4)";
-                            el.style.color = "#fff";
-                            el.style.transform = "scale(1.1)";
-                          }}
-                          onMouseLeave={(e) => {
-                            const el = e.currentTarget;
-                            el.style.background = "rgba(0,0,0,0.6)";
-                            el.style.borderColor = "rgba(255,255,255,0.12)";
-                            el.style.color = "rgba(255,255,255,0.8)";
-                            el.style.transform = "scale(1)";
-                          }}
-                          title="Cerrar panel"
-                          style={{
-                            position: "absolute", top: 6, right: 6,
-                            width: 20, height: 20,
-                            borderRadius: "50%",
-                            background: "rgba(0,0,0,0.6)",
-                            backdropFilter: "blur(4px)",
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            color: "rgba(255,255,255,0.8)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            cursor: "pointer",
-                            zIndex: 30,
-                            fontSize: 11,
-                            lineHeight: 1,
-                            transition: "all 0.15s",
-                            padding: 0,
-                          }}
-                        >
-                          ✕
-                        </button>
-                      )}
                     </div>
                     {rowIdx < col.panels.length - 1 && (
                       <RowResizer

@@ -23,14 +23,11 @@ export function AppShell() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
-  const [editStartAtPanels, setEditStartAtPanels] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Layout dinámico — solo activo cuando el workspace activo tiene layout "dynamic"
-  const isDynamic = activeWorkspace?.layout === "dynamic";
-  const { layout: dynamicLayout, save: saveDynLayout, addColumnWithPanel, addPanelToColumn, removePanel } = useDynamicLayout(
-    isDynamic ? activeWorkspaceId : null
-  );
+  // Todos los workspaces son dinámicos — cargar siempre el DynamicLayout del workspace activo
+  const { layout: dynamicLayout, save: saveDynLayout, addColumnWithPanel, addPanelToColumn, removePanel } =
+    useDynamicLayout(activeWorkspaceId);
 
   const queryClient = useQueryClient();
 
@@ -67,27 +64,20 @@ export function AppShell() {
 
   useWebviews(
     panels,
-    activeWorkspace?.layout ?? "2col",
+    "dynamic",
     activeWorkspaceId,
-    isDynamic ? dynamicLayout : null
+    dynamicLayout
   );
 
   function openEditWorkspace(ws: Workspace) {
     setEditingWorkspace(ws);
-    setEditStartAtPanels(false);
   }
 
-  function openConfigurePanels() {
-    if (activeWorkspace) {
-      setEditingWorkspace(activeWorkspace);
-      setEditStartAtPanels(true);
-    }
-  }
-
-  // El botón "widget" del PanelHeader emite este evento para abrir el editor de paneles
-  // sin necesidad de prop drilling desde PanelSlot → PanelHeader.
+  // El botón "widget" del PanelHeader emite este evento para abrir el editor del workspace.
   useEffect(() => {
-    const handler = () => openConfigurePanels();
+    const handler = () => {
+      if (activeWorkspace) setEditingWorkspace(activeWorkspace);
+    };
     window.addEventListener("stride:edit-panels", handler);
     return () => window.removeEventListener("stride:edit-panels", handler);
   });
@@ -95,12 +85,11 @@ export function AppShell() {
   const createPanel = useCreatePanel();
 
   // Callback que usa DynamicPanelGrid vía PanelGrid para añadir un panel en una columna.
-  // Crea el panel en SQLite y actualiza la estructura del layout dinámico.
   const handleAddPanelToColumn = useCallback(
     async (colIdx: number, type: PanelType, widgetId?: WidgetId) => {
       if (!activeWorkspaceId) return;
       const newPanelId = crypto.randomUUID();
-      const position = panels.length; // posición secuencial sin semántica especial en dynamic
+      const position = panels.length;
       await createPanel.mutateAsync({
         id: newPanelId,
         workspace_id: activeWorkspaceId,
@@ -114,7 +103,7 @@ export function AppShell() {
     [activeWorkspaceId, panels.length, createPanel, addPanelToColumn]
   );
 
-  // Al crear una nueva columna: añadir panel WEB automáticamente sin preguntar.
+  // Al crear una nueva columna: añadir panel WEB automáticamente.
   const handleAddColumn = useCallback(async () => {
     if (!activeWorkspaceId) return;
     const newPanelId = crypto.randomUUID();
@@ -129,8 +118,7 @@ export function AppShell() {
     await addColumnWithPanel(newPanelId);
   }, [activeWorkspaceId, panels.length, createPanel, addColumnWithPanel]);
 
-  // Para resize drag en DynamicPanelGrid: actualizar layout inmediatamente (optimista)
-  // y persistir en SQLite.
+  // Para resize drag en DynamicPanelGrid: persistir en SQLite.
   const handleDynamicLayoutChange = useCallback(
     (layout: DynamicLayout) => {
       saveDynLayout(layout).catch(console.error);
@@ -158,31 +146,29 @@ export function AppShell() {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
       <Titlebar />
       <div className="flex flex-1 overflow-hidden">
-      <Sidebar
-        workspaces={workspaces}
-        onAddWorkspace={() => setCreateOpen(true)}
-        onEditWorkspace={openEditWorkspace}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
-      <main className="flex-1 overflow-hidden">
-        {activeWorkspace && (panels.length > 0 || isDynamic) && (
-          <PanelGrid
-            panels={panels}
-            layout={activeWorkspace.layout}
-            dynamicLayout={isDynamic ? dynamicLayout : undefined}
-            onDynamicLayoutChange={isDynamic ? handleDynamicLayoutChange : undefined}
-            onAddPanelToColumn={isDynamic ? handleAddPanelToColumn : undefined}
-            onAddColumn={isDynamic ? handleAddColumn : undefined}
-            onRemovePanel={isDynamic ? handleRemovePanel : undefined}
-          />
-        )}
-        {!activeWorkspace && (
-          <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-            Selecciona un workspace
-          </div>
-        )}
-      </main>
-
+        <Sidebar
+          workspaces={workspaces}
+          onAddWorkspace={() => setCreateOpen(true)}
+          onEditWorkspace={openEditWorkspace}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+        <main className="flex-1 overflow-hidden">
+          {activeWorkspace && (
+            <PanelGrid
+              panels={panels}
+              dynamicLayout={dynamicLayout}
+              onDynamicLayoutChange={handleDynamicLayoutChange}
+              onAddPanelToColumn={handleAddPanelToColumn}
+              onAddColumn={handleAddColumn}
+              onRemovePanel={handleRemovePanel}
+            />
+          )}
+          {!activeWorkspace && (
+            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+              Selecciona un workspace
+            </div>
+          )}
+        </main>
       </div>
 
       <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -193,7 +179,6 @@ export function AppShell() {
       <WorkspaceDialog
         open={editingWorkspace !== null}
         workspace={editingWorkspace}
-        startAtPanels={editStartAtPanels}
         onClose={() => setEditingWorkspace(null)}
       />
     </div>

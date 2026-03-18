@@ -97,6 +97,26 @@ async function runMigrations(db: Database): Promise<void> {
       // Columna ya existe — ignorar
     }
   }
+
+  // Migración de datos: eliminar layouts estáticos y forzar re-seed con layouts dinámicos.
+  // Guarda: se ejecuta solo una vez gracias al flag 'migration_dynamic_layouts'.
+  const migrationRows = await db.select<{ value: string }[]>(
+    "SELECT value FROM settings WHERE key = 'migration_dynamic_layouts'"
+  );
+  if (migrationRows.length === 0) {
+    await db.execute("DELETE FROM notes_history");
+    await db.execute("DELETE FROM notes");
+    await db.execute("DELETE FROM workspace_layouts");
+    await db.execute("DELETE FROM panels");
+    await db.execute("DELETE FROM workspaces");
+    await db.execute("DELETE FROM settings WHERE key = 'seed_v2'");
+    await db.execute("DELETE FROM settings WHERE key = 'seed_v3'");
+    await db.execute("DELETE FROM settings WHERE key = 'seed_v4'");
+    await db.execute("DELETE FROM settings WHERE key = 'onboarding_seeded'");
+    await db.execute(
+      "INSERT OR IGNORE INTO settings (key, value) VALUES ('migration_dynamic_layouts', 'true')"
+    );
+  }
 }
 
 // --- Helpers para layout dinámico ---

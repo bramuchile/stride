@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { X, RotateCcw, Github, Info, Database, Palette, AlertTriangle } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { seedIfNeeded } from "@/lib/seed";
+import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 
 interface Props {
   open: boolean;
@@ -48,6 +49,53 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
   );
 }
 
+// ── Fila con toggle activo ────────────────────────────────────────────────────
+function ToggleRow({ label, description, checked, onChange }: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (val: boolean) => void;
+}) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "10px 0",
+      borderBottom: "1px solid rgba(46,43,62,0.4)",
+    }}>
+      <div style={{ flex: 1, marginRight: 14 }}>
+        <div style={{ fontSize: 11, color: "var(--text2)", fontFamily: "'Instrument Sans', sans-serif" }}>
+          {label}
+        </div>
+        {description && (
+          <div style={{ fontSize: 10, color: "var(--text3)", fontFamily: "'Instrument Sans', sans-serif", marginTop: 2, lineHeight: 1.5 }}>
+            {description}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        aria-pressed={checked}
+        style={{
+          width: 34, height: 18, borderRadius: 9, border: "none",
+          background: checked ? "var(--accent)" : "var(--border2)",
+          cursor: "pointer", padding: 0, position: "relative", flexShrink: 0,
+          transition: "background 0.2s ease",
+          boxShadow: checked ? "0 0 8px var(--accent-glow)" : "none",
+        }}
+      >
+        <div style={{
+          width: 12, height: 12, borderRadius: "50%",
+          background: "white",
+          position: "absolute", top: 3,
+          left: checked ? 19 : 3,
+          transition: "left 0.2s ease",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.35)",
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // ── Fila de opción deshabilitada ─────────────────────────────────────────────
 function OptionRow({ label, value, badge }: { label: string; value: string; badge?: string }) {
   return (
@@ -87,6 +135,16 @@ export function SettingsDrawer({ open, onClose }: Props) {
   // mounted se activa solo cuando open=true por primera vez — evita render en el DOM al arrancar
   const [mounted, setMounted] = useState(false);
   const [appVersion, setAppVersion] = useState<string>("...");
+  const { presentationMode, setPresentationMode } = useWorkspaceStore();
+
+  async function handlePresentationModeToggle(val: boolean) {
+    setPresentationMode(val);
+    const db = await getDb();
+    await db.execute(
+      "INSERT OR REPLACE INTO settings (key, value) VALUES ('presentation_mode', ?)",
+      [val ? "1" : "0"]
+    );
+  }
 
   useEffect(() => {
     if (open) setMounted(true);
@@ -218,6 +276,12 @@ export function SettingsDrawer({ open, onClose }: Props) {
             <OptionRow label="Tema" value="Oscuro" />
             <OptionRow label="Fuente de UI" value="Instrument Sans" badge="Fase 2" />
             <OptionRow label="Densidad" value="Compacta" badge="Fase 2" />
+            <ToggleRow
+              label="Modo Presentación"
+              description="Oculta las barras de navegación de los paneles. Ideal para dashboards en televisores."
+              checked={presentationMode}
+              onChange={handlePresentationModeToggle}
+            />
           </Section>
 
           {/* ── Datos ── */}
