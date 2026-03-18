@@ -165,7 +165,7 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
       {panel.type === "WEB" ? (
         <>
           <div style={{
-            overflow: "hidden",
+            overflow: presentationMode ? "hidden" : "visible",
             height: presentationMode ? 0 : 32,
             flexShrink: 0,
             transition: "height 0.2s ease",
