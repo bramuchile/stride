@@ -9,10 +9,7 @@ use crate::filters::FOCUS_MODE_ENABLED;
 /// 2. Dispara un CustomEvent en TODOS los WebViews activos para toggle inmediato sin reload.
 /// La persistencia en SQLite la maneja TypeScript (FocusModeButton).
 #[tauri::command]
-pub async fn set_focus_mode<R: Runtime>(
-    app: AppHandle<R>,
-    enabled: bool,
-) -> Result<(), String> {
+pub async fn set_focus_mode<R: Runtime>(app: AppHandle<R>, enabled: bool) -> Result<(), String> {
     FOCUS_MODE_ENABLED.store(enabled, Ordering::Relaxed);
 
     // Construir JS que dispara el evento de toggle en la página

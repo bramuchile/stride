@@ -1,7 +1,6 @@
 /// Comandos Tauri para gestión de la cuenta Google conectada.
 /// La autenticación OAuth se realiza en google_auth.rs (lógica de dominio).
 /// La persistencia usa la misma conexión SQLite que PermissionCache (ya gestionada).
-
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::commands::permissions::{
@@ -25,8 +24,8 @@ pub async fn connect_google_account<R: Runtime>(
     let profile = start_oauth_flow().await?;
 
     let info = GoogleAccountInfo {
-        name:        profile.name.clone(),
-        email:       profile.email.clone(),
+        name: profile.name.clone(),
+        email: profile.email.clone(),
         picture_url: profile.picture_url.clone(),
     };
 
@@ -78,17 +77,15 @@ pub async fn get_google_account<R: Runtime>(
     }
 
     Ok(Some(GoogleAccountInfo {
-        name:        account.name,
-        email:       account.email,
+        name: account.name,
+        email: account.email,
         picture_url: account.picture_url,
     }))
 }
 
 /// Elimina la cuenta Google de SQLite.
 #[tauri::command]
-pub async fn disconnect_google_account<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<(), String> {
+pub async fn disconnect_google_account<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let cache = app.state::<PermissionCache>();
     let conn = cache.conn.lock().unwrap();
     delete_google_account(&conn).map_err(|e| e.to_string())

@@ -12,7 +12,7 @@ use crate::google_auth::GoogleProfile;
 /// Valor: true = concedido, false = denegado
 #[derive(Clone)]
 pub struct PermissionCache {
-    pub map:  Arc<Mutex<HashMap<String, bool>>>,
+    pub map: Arc<Mutex<HashMap<String, bool>>>,
     pub conn: Arc<Mutex<rusqlite::Connection>>,
 }
 
@@ -76,17 +76,17 @@ pub fn get_google_account_db(
         [],
         |row| {
             Ok(StoredGoogleAccount {
-                name:          row.get(0)?,
-                email:         row.get(1)?,
-                picture_url:   row.get(2)?,
+                name: row.get(0)?,
+                email: row.get(1)?,
+                picture_url: row.get(2)?,
                 refresh_token: row.get(3)?,
             })
         },
     );
     match result {
-        Ok(account)                       => Ok(Some(account)),
+        Ok(account) => Ok(Some(account)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e)                            => Err(e),
+        Err(e) => Err(e),
     }
 }
 
@@ -99,8 +99,7 @@ pub fn delete_google_account(conn: &rusqlite::Connection) -> rusqlite::Result<()
 /// Se llama durante el setup() para pre-poblar el HashMap.
 pub fn load_all(conn: &rusqlite::Connection) -> HashMap<String, bool> {
     let mut map = HashMap::new();
-    if let Ok(mut stmt) =
-        conn.prepare("SELECT origin, permission, granted FROM permission_grants")
+    if let Ok(mut stmt) = conn.prepare("SELECT origin, permission, granted FROM permission_grants")
     {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok((
@@ -134,12 +133,7 @@ fn db_lookup(
     .map(|v| v != 0)
 }
 
-fn db_save(
-    conn: &Arc<Mutex<rusqlite::Connection>>,
-    origin: &str,
-    permission: &str,
-    granted: bool,
-) {
+fn db_save(conn: &Arc<Mutex<rusqlite::Connection>>, origin: &str, permission: &str, granted: bool) {
     if let Ok(conn) = conn.lock() {
         let _ = conn.execute(
             "INSERT INTO permission_grants (origin, permission, granted)
@@ -160,17 +154,17 @@ fn show_dialog(domain: &str, permission: &str) -> bool {
     };
 
     let perm_es = match permission {
-        "Geolocation"   => "tu Ubicación",
-        "Camera"        => "tu Cámara",
-        "Microphone"    => "tu Micrófono",
+        "Geolocation" => "tu Ubicación",
+        "Camera" => "tu Cámara",
+        "Microphone" => "tu Micrófono",
         "Notifications" => "enviar Notificaciones",
-        _               => permission,
+        _ => permission,
     };
 
     let message = format!("{domain} quiere acceder a {perm_es}. ¿Permitir?");
-    let title   = "Solicitud de permiso";
+    let title = "Solicitud de permiso";
 
-    let msg_wide:   Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
+    let msg_wide: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
     let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
 
     let result = unsafe {
@@ -233,12 +227,9 @@ unsafe fn register_permission_handler(
 ) -> windows::core::Result<()> {
     use webview2_com::{
         Microsoft::Web::WebView2::Win32::{
-            COREWEBVIEW2_PERMISSION_KIND,
-            COREWEBVIEW2_PERMISSION_KIND_CAMERA,
-            COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION,
-            COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
-            COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS,
-            COREWEBVIEW2_PERMISSION_STATE_ALLOW,
+            COREWEBVIEW2_PERMISSION_KIND, COREWEBVIEW2_PERMISSION_KIND_CAMERA,
+            COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION, COREWEBVIEW2_PERMISSION_KIND_MICROPHONE,
+            COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS, COREWEBVIEW2_PERMISSION_STATE_ALLOW,
             COREWEBVIEW2_PERMISSION_STATE_DENY,
         },
         PermissionRequestedEventHandler,
@@ -247,7 +238,7 @@ unsafe fn register_permission_handler(
     let core_webview = pv.controller().CoreWebView2()?;
     let mut token: i64 = 0;
 
-    let map  = cache.map.clone();
+    let map = cache.map.clone();
     let conn = cache.conn.clone();
 
     core_webview.add_PermissionRequested(
@@ -259,9 +250,9 @@ unsafe fn register_permission_handler(
             args.PermissionKind(&mut kind)?;
 
             let perm = match kind {
-                COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION   => "Geolocation",
-                COREWEBVIEW2_PERMISSION_KIND_CAMERA        => "Camera",
-                COREWEBVIEW2_PERMISSION_KIND_MICROPHONE    => "Microphone",
+                COREWEBVIEW2_PERMISSION_KIND_GEOLOCATION => "Geolocation",
+                COREWEBVIEW2_PERMISSION_KIND_CAMERA => "Camera",
+                COREWEBVIEW2_PERMISSION_KIND_MICROPHONE => "Microphone",
                 COREWEBVIEW2_PERMISSION_KIND_NOTIFICATIONS => "Notifications",
                 // CLIPBOARD_READ lo gestiona wry automáticamente; ignorar el resto
                 _ => return Ok(()),
@@ -336,7 +327,7 @@ pub async fn reset_permissions<R: Runtime>(
     {
         let mut map = cache.map.lock().unwrap();
         match &origin {
-            None    => map.clear(),
+            None => map.clear(),
             Some(o) => map.retain(|k, _| !k.starts_with(o.as_str())),
         }
     }

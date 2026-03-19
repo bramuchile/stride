@@ -4,13 +4,31 @@
   // UserDataFolder). Salir antes de instalar cualquier override.
   if (window.__STRIDE_IS_POPUP__) return;
 
+  // ── Architecture ────────────────────────────────────────────────────────────
+  // This script is the JS layer of a two-layer ad blocking system:
+  //
+  // Layer 1 (Rust, webview.rs): WebResourceRequested handler cancels requests
+  //   to ad domains BEFORE they leave the browser engine. Covers all resource
+  //   types (img, script, iframe, media, fetch, XHR) via domain + suffix matching
+  //   against EasyList + EasyPrivacy. Zero latency — no timeout wait.
+  //
+  // Layer 2 (this file): Handles what network blocking cannot:
+  //   - YouTube player JSON pruning (ytInitialPlayerResponse, playerResponse,
+  //     ytInitialData) — removes ad slots before the player reads them
+  //   - fetch/XHR override for YouTube-specific URL patterns (YT_PATTERNS)
+  //   - Auto-skip fallback via MutationObserver on #movie_player
+  //   - Enforcement interstitial removal (SPA-safe, re-attaches on navigation)
+  //   - CSS hiding of ad slot elements (SPA-safe, re-injects on navigation)
+ 
   // ── Estado ─────────────────────────────────────────────────────────────────
   // Arranca en true — el script solo se inyecta cuando Focus Mode está activo.
   // El toggle dinámico actualiza esta variable; fetch/XHR/appendChild la leen en runtime.
   var FOCUS_ENABLED = true;
 
   // ── Listas de filtrado ──────────────────────────────────────────────────────
-  var DOMAINS = new Set(/*STRIDE_DOMAINS*/);
+  // Generic domain blocking is handled by the native Rust WebResourceRequested
+  // handler (webview.rs + filters.rs). This JS layer only handles YouTube-specific
+  // URL patterns that require path/query inspection beyond domain matching.
 
   // Solo patrones que no sean endpoints de tracking propios de YouTube.
   // NO bloquear /api/stats/ads, /ptracking, /generate_204, /watchtime — esos
@@ -20,14 +38,6 @@
     /youtube\.com\/pagead\//,
     /\/get_video_info\?.*adformat/,
   ];
-
-  var CRITICAL = [
-    "doubleclick.net", "googlesyndication.com", "googleadservices.com",
-    "googletagservices.com", "adservice.google.com", "adnxs.com",
-    "rubiconproject.com", "pubmatic.com", "openx.net", "criteo.com",
-    "outbrain.com", "taboola.com", "moatads.com", "demdex.net", "everesttech.net",
-  ];
-  CRITICAL.forEach(function (d) { DOMAINS.add(d); });
 
   // ── pruneAds ────────────────────────────────────────────────────────────────
   // Keys de ads en playerResponse / ytInitialPlayerResponse.
@@ -61,17 +71,11 @@
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+  // shouldBlock: only YouTube-specific URL patterns.
+  // Generic ad domains are blocked upstream by the Rust native handler.
   function shouldBlock(url) {
     try {
-      var u = new URL(url);
-      var h = u.hostname;
-      if (!h) return false;
-      if (DOMAINS.has(h)) return true;
-      var parts = h.split(".");
-      for (var i = 1; i < parts.length - 1; i++) {
-        if (DOMAINS.has(parts.slice(i).join("."))) return true;
-      }
-      var href = u.href;
+      var href = new URL(url).href;
       for (var j = 0; j < YT_PATTERNS.length; j++) {
         if (YT_PATTERNS[j].test(href)) return true;
       }
@@ -118,9 +122,32 @@
     });
   })();
 
+  // ── ytInitialData — ruta alternativa SPA de YouTube ─────────────────────────
+  // YouTube a veces embebe playerResponse dentro de ytInitialData en lugar de
+  // asignarlo directamente a window.playerResponse. Esta capa lo cubre.
+  (function () {
+    var _ytd = window.ytInitialData;
+    if (_ytd && FOCUS_ENABLED) {
+      if (_ytd.playerResponse) pruneAds(_ytd.playerResponse);
+      if (_ytd.contents) pruneAds(_ytd.contents);
+    }
+    Object.defineProperty(window, "ytInitialData", {
+      get: function () { return _ytd; },
+      set: function (data) {
+        if (data && FOCUS_ENABLED) {
+          if (data.playerResponse) pruneAds(data.playerResponse);
+          if (data.contents) pruneAds(data.contents);
+        }
+        _ytd = data;
+      },
+      configurable: true,
+    });
+  })();
+
   // ── fetch override (Capa 1) ─────────────────────────────────────────────────
-  // Solo bloquea dominios de terceros. Las respuestas de YouTube pasan sin tocar
-  // para no activar enforcement mode server-side.
+  // Handles YouTube-specific URL patterns (YT_PATTERNS) that require path/query
+  // inspection. Generic domain blocking is done upstream by the Rust native handler.
+  // YouTube's own endpoints pass through untouched to avoid server-side enforcement.
   if (!window.__SF__) {
     window.__SF__ = window.fetch;
     window.fetch = async function () {
@@ -131,10 +158,41 @@
         arg0 && typeof arg0 === "object" && arg0.url ? arg0.url : arg0 || ""
       );
 
+      // Block third-party ad domains (YT_PATTERNS)
       if (shouldBlock(url)) {
         return new Response("", {
           status: 200,
           headers: { "Content-Type": "text/plain" },
+        });
+      }
+
+      // Intercept YouTube player/next API responses that contain playerResponse
+      // kevlar uses /youtubei/v1/player and /youtubei/v1/next endpoints
+      var isPlayerApi = url.includes("/youtubei/v1/player") ||
+                        url.includes("/youtubei/v1/next") ||
+                        url.includes("/youtubei/v1/browse");
+
+      if (isPlayerApi) {
+        return window.__SF__.apply(this, arguments).then(function(response) {
+          if (!FOCUS_ENABLED) return response;
+          // Clone to read body without consuming it
+          return response.clone().json().then(function(data) {
+            if (data) {
+              pruneAds(data);
+              if (data.playerResponse) pruneAds(data.playerResponse);
+              if (data.contents) pruneAds(data.contents);
+              if (data.currentVideoEndpoint) pruneAds(data.currentVideoEndpoint);
+            }
+            // Return new response with pruned data
+            return new Response(JSON.stringify(data), {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers,
+            });
+          }).catch(function() {
+            // If JSON parsing fails, return original response untouched
+            return response;
+          });
         });
       }
 
@@ -197,6 +255,7 @@
 
   injectCSS();
   document.addEventListener("DOMContentLoaded", injectCSS);
+  window.addEventListener("yt-navigate-finish", injectCSS);
 
   // ── Toggle dinámico ──────────────────────────────────────────────────────────
   // fetch/XHR leen FOCUS_ENABLED en cada llamada — no hace falta
@@ -211,10 +270,10 @@
     }
   });
 
-  // ── Ad skip automático (Capa 5) ──────────────────────────────────────────────
-  // Detecta anuncios pre-roll en SPA navigation y los salta avanzando el tiempo
-  // del video. Indistinguible server-side de un usuario que hace clic "Saltar".
-  // ytInitialPlayerResponse pruning cubre la primera carga (no llega a cargar el ad).
+  // ── Ad skip automático (Capa 5) ─────────────────────────────────────────────
+  // Usa MutationObserver sobre #movie_player en lugar de setInterval para
+  // eliminar el polling de 300ms. Solo actúa cuando 'ad-showing' aparece
+  // en classList — cero overhead en reproducción normal.
   (function () {
     var _skipTimer = null;
     var _wasMuted = false;
@@ -226,14 +285,8 @@
       if (v && isFinite(v.duration) && v.duration > 0) v.currentTime = v.duration;
     }
 
-    setInterval(function () {
-      if (!FOCUS_ENABLED) {
-        if (_skipTimer) { clearInterval(_skipTimer); _skipTimer = null; }
-        return;
-      }
-      var player = document.querySelector('#movie_player');
-      var adActive = player && player.classList.contains('ad-showing');
-
+    function onAdStateChange(adActive) {
+      if (!FOCUS_ENABLED) return;
       if (adActive && !_skipTimer) {
         var v = document.querySelector('video.html5-main-video');
         if (v) { _wasMuted = v.muted; v.muted = true; }
@@ -249,7 +302,27 @@
           }
         }, 200);
       }
-    }, 300);
+    }
+
+    var playerObserver = new MutationObserver(function (mutations) {
+      mutations.forEach(function (m) {
+        if (m.type === 'attributes' && m.attributeName === 'class') {
+          var p = m.target;
+          onAdStateChange(p.classList.contains('ad-showing'));
+        }
+      });
+    });
+
+    function attachPlayerObserver() {
+      var player = document.querySelector('#movie_player');
+      if (player) {
+        playerObserver.disconnect();
+        playerObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', attachPlayerObserver);
+    window.addEventListener('yt-navigate-finish', attachPlayerObserver);
   })();
 
   const adblockInterstitialObserver = new MutationObserver(() => {
@@ -269,17 +342,15 @@
     }
   });
 
-  if (document.body) {
+  function attachEnforcementObserver() {
+    if (!document.body) return;
+    adblockInterstitialObserver.disconnect();
     adblockInterstitialObserver.observe(document.body, {
       childList: true,
       subtree: true,
     });
-  } else {
-    document.addEventListener("DOMContentLoaded", function () {
-      adblockInterstitialObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-    });
   }
+  attachEnforcementObserver();
+  document.addEventListener("DOMContentLoaded", attachEnforcementObserver);
+  window.addEventListener("yt-navigate-finish", attachEnforcementObserver);
 })();

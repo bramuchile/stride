@@ -61,12 +61,18 @@ Pre-built installers are available on the [Releases page](https://github.com/bra
 - **Keyboard navigation** — `Ctrl+1…9` to jump to any workspace, `Ctrl+Tab` to cycle
 
 **Focus Mode**
-- **Ad filtering** — blocks ads on YouTube and across all panels via JS-level interception (`initialization_script`); default ON
-- **4-layer filter**: `appendChild`/`insertBefore` intercept + fetch/XHR override + CSS hide + MutationObserver fallback
-- **YouTube-specific**: JSON response pruning (no empty-response crashes), `ytInitialPlayerResponse` + `playerResponse` interceptors for SPA navigation
-- **EasyList integration** — bundled domain list; auto-updates every 7 days from `easylist.to`
+- **Two-layer ad blocking architecture**:
+  - **Layer 1 — Native network blocking (Rust)**: `WebResourceRequested` handler registered via `webview2-com` intercepts every network request *before it leaves the browser engine*. Requests matching the domain blocklist are cancelled with a synthetic empty response — zero latency, zero timeout wait. Handler reads `FOCUS_MODE_ENABLED` AtomicBool on every request; toggle is instant across all existing WebViews.
+  - **Layer 2 — YouTube scriptlet layer (JS)**: `focus_filter.js` injected as `initialization_script` handles YouTube-specific ad elimination that can't be done at the network level (player JSON pruning, SPA navigation, anti-detection).
+- **WebView lifecycle**: panels are created on `about:blank`, the native handler is registered, then navigation to the real URL begins — ensures zero requests escape before the handler is active.
+- **YouTube coverage**:
+  - `ytInitialPlayerResponse` + `playerResponse` + `ytInitialData` intercepted via `Object.defineProperty` — ad slots pruned from player JSON before the player reads them
+  - SPA-safe: re-attaches on every `yt-navigate-finish` event (CSS injection, enforcement observer, player observer)
+  - Auto-skip fallback via `MutationObserver` on `#movie_player` classList (replaces polling — zero CPU overhead during normal playback)
+  - Enforcement interstitial observer re-attaches on each SPA navigation
+- **Filter lists**: EasyList + EasyPrivacy combined, bundled as compile-time fallback, auto-updated every 7 days from `easylist.to`; `should_block(url)` matches hostname and all parent domain suffixes
 - **Persistent toggle** — stored in SQLite; restored before any WebView is created (no race condition)
-- **Dynamic toggle** — enable/disable without reload via `stride:focus-toggle` CustomEvent
+- **Dynamic toggle** — enable/disable without panel reload via `FOCUS_MODE_ENABLED` AtomicBool (Rust) + `stride:focus-toggle` CustomEvent (JS CSS layer)
 
 **Shell**
 - **Custom titlebar** — frameless, Windows 11-style controls (minimize/maximize/close), active workspace name, update notification banner
@@ -161,14 +167,52 @@ stride/
     │   └── easylist_domains.txt         # Bundled ad domains (compile-time fallback)
     └── src/
         ├── lib.rs                       # Plugin registration + startup init
-        ├── filters.rs                   # FilterEngine + EasyList + FOCUS_MODE_ENABLED AtomicBool
-        ├── focus_filter.js              # JS template injected as initialization_script (4 layers)
+        ├── filters.rs                   # FilterEngine + EasyList + EasyPrivacy + should_block() + FOCUS_MODE_ENABLED AtomicBool
+        ├── focus_filter.js              # JS scriptlet layer: ytInitialPlayerResponse/playerResponse/ytInitialData pruning, fetch/XHR override, CSS, auto-skip, anti-detection
         └── commands/
-            ├── webview.rs               # create/resize/show/hide/navigate WebViews
+            ├── webview.rs               # create/resize/show/hide/navigate WebViews + WebResourceRequested native handler
             ├── focus.rs                 # set_focus_mode / get_focus_mode Tauri commands
             ├── permissions.rs           # Permission cache (camera, mic, geolocation, notifications)
             └── tooltip.rs               # Tooltip overlay window (above WebView2 children)
 ```
+
+---
+
+## Focus Mode Architecture
+
+Focus Mode uses a two-layer approach to eliminate ads with zero latency:
+
+### Layer 1 — Native network blocking (Rust, `webview.rs`)
+
+Registered via `with_webview` + `webview2-com` (same pattern as `permissions.rs`):
+
+```
+Panel created on about:blank
+  → WebResourceRequested handler registered (AddWebResourceRequestedFilter "*" ALL)
+  → Navigation to real URL begins
+    → Every request: filters::should_block(&uri) checked in Rust
+      → Match: CreateWebResourceResponse(empty, 200) — request never leaves engine
+      → No match: request passes through normally
+```
+
+- `FOCUS_MODE_ENABLED` AtomicBool read on every request — toggle is instant
+- `filters::should_block(url)` matches hostname + all parent domain suffixes against EasyList + EasyPrivacy combined list
+
+### Layer 2 — YouTube scriptlet layer (JS, `focus_filter.js`)
+
+Handles what network blocking cannot — the YouTube player's internal ad data:
+
+- `Object.defineProperty` on `ytInitialPlayerResponse`, `playerResponse`, `ytInitialData` — prunes `AD_KEYS` from player JSON before the player reads it
+- fetch/XHR override — blocks remaining third-party ad requests not caught at network level
+- `MutationObserver` on `#movie_player` classList — auto-skip fallback, zero polling overhead
+- Enforcement interstitial observer — re-attaches on every `yt-navigate-finish`
+- CSS injection — hides ad slot elements, re-injected on every SPA navigation
+
+### Key implementation notes
+
+- **`auxiliaryUi` is intentionally excluded from `AD_KEYS`** — it contains non-ad overlays (age-gate, DRM notices); deleting it causes error 282054944 in the YouTube player
+- **`/api/stats/ads`, `/ptracking`, `/generate_204`, `/watchtime` are NOT blocked** — these are YouTube server-side signals; blocking them activates enforcement mode
+- **Layers 3/4 (script tag manipulation) were removed** — the regex approach corrupted inline JSON causing 403 errors on `googlevideo.com`; pruning via `Object.defineProperty` on the parsed object is safe and sufficient
 
 ---
 
@@ -203,12 +247,13 @@ stride/
 - [x] WebView2 hardening (user agent, popup redirect, permission handler)
 - [x] Auto-update via GitHub Releases
 - [x] Error boundary with formatted diagnostics
-- [x] Focus Mode — ad filtering (EasyList + YouTube-specific, 4-layer JS interception)
+- [x] Focus Mode — two-layer ad blocking: native WebResourceRequested (Rust, zero latency) + YouTube scriptlet layer (JS, SPA-safe)
 
 ### Next
 - [ ] Empty panel screen — new-tab style with full bookmarks grid and quick access
 - [ ] Next Meeting widget — Google Calendar API integration
 - [ ] Export / import workspaces as JSON
+- [ ] Focus Mode Phase 3 — adblock-rust engine + full EasyList/EasyPrivacy rule syntax (paths, wildcards, cosmetic filters)
 
 ### Future
 - [ ] Additional widgets: Focus Timer, Daily Briefing, Asset Price, Service Status

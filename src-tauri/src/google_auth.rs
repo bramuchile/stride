@@ -1,6 +1,5 @@
 /// Flujo OAuth 2.0 de Google con servidor de callback local (tiny_http).
 /// Usado para conectar la cuenta Google del usuario y obtener tokens de acceso.
-
 use std::net::TcpListener;
 
 const CLIENT_ID: &str = env!("GOOGLE_CLIENT_ID");
@@ -8,8 +7,7 @@ const CLIENT_SECRET: &str = env!("GOOGLE_CLIENT_SECRET");
 const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL: &str = "https://www.googleapis.com/oauth2/v2/userinfo";
-const SCOPES: &str =
-    "openid email profile https://www.googleapis.com/auth/calendar.readonly";
+const SCOPES: &str = "openid email profile https://www.googleapis.com/auth/calendar.readonly";
 
 /// Perfil completo obtenido tras el flujo OAuth (incluye tokens — no serializar al frontend).
 pub struct GoogleProfile {
@@ -82,18 +80,18 @@ pub async fn start_oauth_flow() -> Result<GoogleProfile, String> {
                     })?;
 
                 // 5. Responder al navegador con página de confirmación
-                let html = "<html><body style='font-family:sans-serif;text-align:center;padding:40px'>\
+                let html =
+                    "<html><body style='font-family:sans-serif;text-align:center;padding:40px'>\
                     <h2>&#x2713; Autenticación completada</h2>\
                     <p>Puedes cerrar esta ventana y volver a Stride.</p>\
                     </body></html>";
-                let response = tiny_http::Response::from_string(html)
-                    .with_header(
-                        tiny_http::Header::from_bytes(
-                            &b"Content-Type"[..],
-                            &b"text/html; charset=utf-8"[..],
-                        )
-                        .unwrap(),
-                    );
+                let response = tiny_http::Response::from_string(html).with_header(
+                    tiny_http::Header::from_bytes(
+                        &b"Content-Type"[..],
+                        &b"text/html; charset=utf-8"[..],
+                    )
+                    .unwrap(),
+                );
                 let _ = request.respond(response);
 
                 Ok(code)

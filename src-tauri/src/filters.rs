@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::{OnceLock, RwLock};
 use tauri::{AppHandle, Manager, Runtime};
@@ -9,15 +10,40 @@ pub static FOCUS_MODE_ENABLED: AtomicBool = AtomicBool::new(true);
 /// Se inicializan en setup() y se actualizan en background cada 7 días.
 pub static FILTER_RULES: OnceLock<RwLock<FilterRules>> = OnceLock::new();
 
+/// Domains that must never be blocked — blocking these breaks core functionality.
+/// googlevideo.com: YouTube video stream host (same domain used for ads AND video)
+/// youtube.com, ytimg.com: YouTube core infrastructure
+static NEVER_BLOCK: &[&str] = &[
+    "googlevideo.com",
+    "youtube.com",
+    "ytimg.com",
+    "yt3.ggpht.com",
+    "i.ytimg.com",
+    "googleapis.com",
+];
+
 /// Dominios bloqueados extraídos de EasyList (||domain^ rules solamente).
 /// Bundleado en el binario como fallback — se reemplaza por versión descargada si existe.
 static BUNDLED_DOMAINS: &str = include_str!("../filters/easylist_domains.txt");
+static EASYLIST_RUNTIME_FILE: &str = "easylist_domains.txt";
+static EASYPRIVACY_RUNTIME_FILE: &str = "easyprivacy_domains.txt";
 
 /// Template JS de Modo Focus. Rust reemplaza /*STRIDE_DOMAINS*/ con el JSON de dominios.
 static FOCUS_FILTER_TEMPLATE: &str = include_str!("focus_filter.js");
 
 pub struct FilterRules {
-    pub domains: Vec<String>,
+    pub domains: HashSet<String>,
+}
+
+fn merge_domains<I>(lists: I) -> HashSet<String>
+where
+    I: IntoIterator<Item = Vec<String>>,
+{
+    let mut merged = HashSet::new();
+    for list in lists {
+        merged.extend(list);
+    }
+    merged
 }
 
 /// Parsear lista de dominios desde texto (formato: un dominio por línea, '#' = comentario).
@@ -36,8 +62,11 @@ pub fn parse_easylist_domains(content: &str) -> Vec<String> {
     for line in content.lines() {
         let line = line.trim();
         // Ignorar comentarios, reglas CSS (##), excepciones (@@), líneas vacías
-        if line.is_empty() || line.starts_with('!') || line.contains("##")
-            || line.contains("#@#") || line.starts_with("@@")
+        if line.is_empty()
+            || line.starts_with('!')
+            || line.contains("##")
+            || line.contains("#@#")
+            || line.starts_with("@@")
         {
             continue;
         }
@@ -54,39 +83,110 @@ pub fn parse_easylist_domains(content: &str) -> Vec<String> {
     domains
 }
 
+pub fn should_block(url: &str) -> bool {
+    let hostname = match url::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_lowercase()))
+    {
+        Some(h) if !h.is_empty() => h,
+        _ => return false,
+    };
+
+    // Never block YouTube core infrastructure
+    for never in NEVER_BLOCK {
+        if hostname == *never || hostname.ends_with(&format!(".{}", never)) {
+            return false;
+        }
+    }
+
+    let rules = match FILTER_RULES.get() {
+        Some(r) => r,
+        None => return false,
+    };
+
+    let domains = match rules.read() {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+
+    // O(1) direct lookup
+    if domains.domains.contains(&hostname) {
+        return true;
+    }
+
+    // O(k) where k = number of domain parts (max ~5) — not O(n)
+    let parts: Vec<&str> = hostname.split('.').collect();
+    for i in 1..parts.len().saturating_sub(1) {
+        let suffix = parts[i..].join(".");
+        if domains.domains.contains(&suffix) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Inicializar FilterRules en startup.
 /// Prioridad: archivo descargado en AppData > bundled.
 pub fn init<R: Runtime>(app: &AppHandle<R>) {
-    let rules = FILTER_RULES.get_or_init(|| RwLock::new(FilterRules { domains: Vec::new() }));
+    let rules = FILTER_RULES.get_or_init(|| {
+        RwLock::new(FilterRules {
+            domains: HashSet::new(),
+        })
+    });
 
     // Intentar cargar versión descargada desde AppData
-    let runtime_path = app
-        .path()
-        .app_data_dir()
-        .ok()
-        .map(|d| d.join("easylist_domains.txt"));
+    let app_data_dir = app.path().app_data_dir().ok();
 
-    let domains = if let Some(path) = runtime_path.as_ref() {
-        if path.exists() {
-            match std::fs::read_to_string(path) {
+    let mut runtime_lists = Vec::new();
+
+    if let Some(data_dir) = app_data_dir.as_ref() {
+        let easylist_path = data_dir.join(EASYLIST_RUNTIME_FILE);
+        if easylist_path.exists() {
+            match std::fs::read_to_string(&easylist_path) {
                 Ok(content) => {
-                    eprintln!("[Stride] EasyList cargado desde AppData ({} líneas)", content.lines().count());
-                    parse_domains(&content)
+                    eprintln!(
+                        "[Stride] EasyList cargado desde AppData ({} líneas)",
+                        content.lines().count()
+                    );
+                    runtime_lists.push(parse_domains(&content));
                 }
                 Err(e) => {
-                    eprintln!("[Stride] Error leyendo EasyList de AppData: {e} — usando bundled");
-                    parse_domains(BUNDLED_DOMAINS)
+                    eprintln!("[Stride] Error leyendo EasyList de AppData: {e}");
                 }
             }
-        } else {
-            eprintln!("[Stride] EasyList no encontrado en AppData — usando bundled");
-            parse_domains(BUNDLED_DOMAINS)
         }
-    } else {
+
+        let easyprivacy_path = data_dir.join(EASYPRIVACY_RUNTIME_FILE);
+        if easyprivacy_path.exists() {
+            match std::fs::read_to_string(&easyprivacy_path) {
+                Ok(content) => {
+                    eprintln!(
+                        "[Stride] EasyPrivacy cargado desde AppData ({} líneas)",
+                        content.lines().count()
+                    );
+                    runtime_lists.push(parse_domains(&content));
+                }
+                Err(e) => {
+                    eprintln!("[Stride] Error leyendo EasyPrivacy de AppData: {e}");
+                }
+            }
+        }
+    }
+
+    let domains = if runtime_lists.is_empty() {
+        eprintln!("[Stride] EasyList/EasyPrivacy no encontrados en AppData — usando bundled");
         parse_domains(BUNDLED_DOMAINS)
+            .into_iter()
+            .collect::<HashSet<String>>()
+    } else {
+        merge_domains(runtime_lists)
     };
 
-    eprintln!("[Stride] FilterRules inicializado: {} dominios", domains.len());
+    eprintln!(
+        "[Stride] FilterRules inicializado: {} dominios",
+        domains.len()
+    );
     if let Ok(mut r) = rules.write() {
         r.domains = domains;
     }
@@ -111,8 +211,18 @@ pub fn build_focus_script() -> String {
 /// Descargar EasyList actualizada y actualizar FilterRules en background.
 /// Se llama una vez al arrancar (sin delay) y luego cada 7 días.
 pub async fn download_and_update<R: Runtime>(app: AppHandle<R>) {
-    let url = "https://easylist.to/easylist/easylist.txt";
-    eprintln!("[Stride] Descargando EasyList desde {url}...");
+    let lists = [
+        (
+            "EasyList",
+            "https://easylist.to/easylist/easylist.txt",
+            EASYLIST_RUNTIME_FILE,
+        ),
+        (
+            "EasyPrivacy",
+            "https://easylist.to/easylist/easyprivacy.txt",
+            EASYPRIVACY_RUNTIME_FILE,
+        ),
+    ];
 
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
@@ -125,43 +235,63 @@ pub async fn download_and_update<R: Runtime>(app: AppHandle<R>) {
         }
     };
 
-    let text = match client.get(url).send().await {
-        Ok(resp) => match resp.text().await {
-            Ok(t) => t,
-            Err(e) => { eprintln!("[Stride] Error leyendo respuesta EasyList: {e}"); return; }
-        },
-        Err(e) => { eprintln!("[Stride] Error descargando EasyList: {e}"); return; }
-    };
+    let mut merged_lists = Vec::new();
 
-    // Validar que es EasyList real
-    if !text.starts_with("! Title:") && !text.contains("EasyList") {
-        eprintln!("[Stride] Respuesta no parece ser EasyList válida");
-        return;
-    }
+    for (name, url, out_file) in lists {
+        eprintln!("[Stride] Descargando {name} desde {url}...");
+        let text = match client.get(url).send().await {
+            Ok(resp) => match resp.text().await {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("[Stride] Error leyendo respuesta {name}: {e}");
+                    continue;
+                }
+            },
+            Err(e) => {
+                eprintln!("[Stride] Error descargando {name}: {e}");
+                continue;
+            }
+        };
 
-    let domains = parse_easylist_domains(&text);
-    eprintln!("[Stride] EasyList descargada: {} dominios extraídos", domains.len());
-
-    if domains.is_empty() {
-        eprintln!("[Stride] EasyList descargada sin dominios — ignorando");
-        return;
-    }
-
-    // Guardar en AppData para próximos arranques
-    if let Ok(data_dir) = app.path().app_data_dir() {
-        let out_path = data_dir.join("easylist_domains.txt");
-        let content = domains.join("\n");
-        if let Err(e) = std::fs::write(&out_path, &content) {
-            eprintln!("[Stride] Error guardando EasyList en AppData: {e}");
-        } else {
-            eprintln!("[Stride] EasyList guardada en {:?}", out_path);
+        if !text.starts_with("! Title:") && !text.contains(name) {
+            eprintln!("[Stride] Respuesta no parece ser {name} válida");
+            continue;
         }
+
+        let domains = parse_easylist_domains(&text);
+        eprintln!(
+            "[Stride] {name} descargada: {} dominios extraídos",
+            domains.len()
+        );
+
+        if domains.is_empty() {
+            eprintln!("[Stride] {name} descargada sin dominios — ignorando");
+            continue;
+        }
+
+        if let Ok(data_dir) = app.path().app_data_dir() {
+            let out_path = data_dir.join(out_file);
+            let content = domains.join("\n");
+            if let Err(e) = std::fs::write(&out_path, &content) {
+                eprintln!("[Stride] Error guardando {name} en AppData: {e}");
+            } else {
+                eprintln!("[Stride] {name} guardada en {:?}", out_path);
+            }
+        }
+
+        merged_lists.push(domains);
     }
 
-    // Actualizar FilterRules global — nuevos WebViews usarán las reglas actualizadas
+    if merged_lists.is_empty() {
+        eprintln!(
+            "[Stride] No se pudo actualizar EasyList/EasyPrivacy — se mantienen reglas actuales"
+        );
+        return;
+    }
+
     if let Some(rules) = FILTER_RULES.get() {
         if let Ok(mut r) = rules.write() {
-            r.domains = domains;
+            r.domains = merge_domains(merged_lists);
         }
     }
 }

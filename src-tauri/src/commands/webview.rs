@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, WebviewBuilder, WebviewUrl, Window};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, Webview, WebviewBuilder,
+    WebviewUrl, Window,
+};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::commands::permissions;
@@ -17,11 +20,89 @@ const PANEL_BAR_HEIGHT: f64 = 32.0;
 // Gap CSS entre filas en el grid 2x2 (gap: "1px" en PanelGrid.tsx).
 const ROW_GAP_2X2: f64 = 1.0;
 
-
 #[derive(Clone, Serialize)]
 struct PanelNavigatedPayload {
     panel_id: String,
     url: String,
+}
+
+#[cfg(windows)]
+unsafe fn take_pwstr(pwstr: windows::core::PWSTR) -> String {
+    use windows::Win32::System::Com::CoTaskMemFree;
+
+    if pwstr.is_null() {
+        return String::new();
+    }
+
+    let ptr = pwstr.as_ptr();
+    let len = (0usize..)
+        .take_while(|&i| unsafe { *ptr.add(i) } != 0)
+        .count();
+
+    let s = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
+    CoTaskMemFree(Some(ptr as *const _));
+    s
+}
+
+fn attach_web_resource_blocker<R: Runtime>(webview: &Webview<R>) {
+    let _ = webview.with_webview(move |pv| {
+        #[cfg(windows)]
+        {
+            if let Err(e) = unsafe { register_web_resource_blocker(pv) } {
+                eprintln!("[Stride] Error registrando WebResourceRequested: {e:?}");
+            }
+        }
+    });
+}
+
+#[cfg(windows)]
+unsafe fn register_web_resource_blocker(
+    pv: tauri::webview::PlatformWebview,
+) -> windows::core::Result<()> {
+    use webview2_com::{
+        Microsoft::Web::WebView2::Win32::COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+        WebResourceRequestedEventHandler,
+    };
+    use windows::core::HSTRING;
+
+    // ICoreWebView2 + ICoreWebView2Environment: APIs COM nativas usadas para
+    // registrar WebResourceRequested y fabricar la respuesta sintética bloqueada.
+    let core_webview = pv.controller().CoreWebView2()?;
+    let env = pv.environment();
+    let mut token: i64 = 0;
+    let filter = HSTRING::from("*");
+
+    core_webview.AddWebResourceRequestedFilter(&filter, COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)?;
+    core_webview.add_WebResourceRequested(
+        &WebResourceRequestedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else {
+                return Ok(());
+            };
+            if !crate::filters::FOCUS_MODE_ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
+                return Ok(());
+            }
+
+            let request = args.Request()?;
+            let uri = {
+                let mut uri_pwstr = windows::core::PWSTR::null();
+                request.Uri(&mut uri_pwstr)?;
+                take_pwstr(uri_pwstr)
+            };
+
+            if !crate::filters::should_block(&uri) {
+                return Ok(());
+            }
+
+            let status = HSTRING::from("OK");
+            let headers = HSTRING::new();
+            let response = env.CreateWebResourceResponse(None, 200, &status, &headers)?;
+            args.SetResponse(&response)?;
+            Ok(())
+        })),
+        &mut token,
+    )?;
+
+    Ok(())
 }
 
 // Calcular bounds del webview según layout, posición del panel y overlay widget opcional.
@@ -173,6 +254,7 @@ pub async fn create_panel_webview<R: Runtime>(
         .join("webview2-profile");
 
     let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
+    let blank_url = url::Url::parse("about:blank").map_err(|e| e.to_string())?;
 
     // Detectar si este panel apunta a WhatsApp Web para inyectar el script de toggle de sidebar.
     let is_whatsapp = parsed_url.host_str() == Some("web.whatsapp.com");
@@ -187,7 +269,7 @@ pub async fn create_panel_webview<R: Runtime>(
     };
 
     // Builder base — igual para todos los paneles
-    let mut webview_builder = WebviewBuilder::new(&webview_label, WebviewUrl::External(parsed_url))
+    let mut webview_builder = WebviewBuilder::new(&webview_label, WebviewUrl::External(blank_url))
         .data_directory(data_dir)
         // FIX 1: UA estándar de Chrome — evita bloqueos en WhatsApp Web, Google Meet, etc.
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -307,8 +389,8 @@ pub async fn create_panel_webview<R: Runtime>(
     //   src-tauri/src/commands/whatsapp_sidebar_toggle.js
     // y recompilar (include_str! embebe el JS en el binario en compile-time).
     if is_whatsapp {
-        webview_builder = webview_builder
-            .initialization_script(include_str!("./whatsapp_sidebar_toggle.js"));
+        webview_builder =
+            webview_builder.initialization_script(include_str!("./whatsapp_sidebar_toggle.js"));
     }
 
     let webview = window
@@ -318,6 +400,8 @@ pub async fn create_panel_webview<R: Runtime>(
     // Instalar handler de permisos (geolocalización, cámara, micrófono, notificaciones)
     let cache = app.state::<permissions::PermissionCache>().inner().clone();
     permissions::attach_handler(&webview, cache);
+    attach_web_resource_blocker(&webview);
+    webview.navigate(parsed_url).map_err(|e| e.to_string())?;
 
     let registry = app.state::<WebviewRegistry>();
     registry
@@ -390,8 +474,8 @@ pub async fn resize_panel_webviews<R: Runtime>(
     let col_count: usize = match layout.as_str() {
         "1col" | "dynamic" => 1, // dynamic usa custom fracs, sin resizers fijos
         "3col" => 3,
-        "2x2"  => 2,
-        _      => 2, // "2col" y default
+        "2x2" => 2,
+        _ => 2, // "2col" y default
     };
     // Espacio disponible para WebViews una vez descontados los resizers horizontales.
     // Debe coincidir con el availableWidth que calcula React en PanelGrid.tsx (línea 54).
@@ -414,7 +498,8 @@ pub async fn resize_panel_webviews<R: Runtime>(
                 );
                 // Si el usuario redimensionó el panel arrastrando el divisor (o layout dinámico),
                 // las fracciones personalizadas sobreescriben el ancho calculado por layout.
-                if let (Some(x_frac), Some(w_frac)) = (panel.custom_x_frac, panel.custom_width_frac) {
+                if let (Some(x_frac), Some(w_frac)) = (panel.custom_x_frac, panel.custom_width_frac)
+                {
                     if layout == "dynamic" {
                         // Para layout dinámico: las fracs ya incluyen el offset de resizers,
                         // son relativas al espacio total disponible (sin sidebar).
@@ -426,7 +511,7 @@ pub async fn resize_panel_webviews<R: Runtime>(
                         // sin resizers; se agrega el offset de resizadores por columna.
                         let col_index = match layout.as_str() {
                             "2x2" => panel.position % 2,
-                            _     => panel.position,
+                            _ => panel.position,
                         };
                         pos.x = sidebar_width
                             + x_frac * available_for_webviews
@@ -436,7 +521,9 @@ pub async fn resize_panel_webviews<R: Runtime>(
                 }
                 // Fracs verticales — exclusivo del layout dinámico.
                 // y_frac y h_frac son relativas al available_height total (sin header).
-                if let (Some(y_frac), Some(h_frac)) = (panel.custom_y_frac, panel.custom_height_frac) {
+                if let (Some(y_frac), Some(h_frac)) =
+                    (panel.custom_y_frac, panel.custom_height_frac)
+                {
                     let total_avail_y = logical_height - header_height;
                     pos.y = header_height + y_frac * total_avail_y;
                     size.height = h_frac * total_avail_y;
@@ -533,7 +620,6 @@ pub async fn navigate_panel_webview<R: Runtime>(
     Ok(())
 }
 
-
 #[tauri::command]
 pub async fn go_back_panel_webview<R: Runtime>(
     app: AppHandle<R>,
@@ -558,7 +644,9 @@ pub async fn go_forward_panel_webview<R: Runtime>(
     let label = registry.0.lock().unwrap().get(&panel_id).cloned();
     if let Some(label) = label {
         if let Some(webview) = app.get_webview(&label) {
-            webview.eval("history.forward()").map_err(|e| e.to_string())?;
+            webview
+                .eval("history.forward()")
+                .map_err(|e| e.to_string())?;
         }
     }
     Ok(())
@@ -576,7 +664,7 @@ mod tests {
         let (pos, size) = calculate_bounds("1col", 0, 1400.0, 900.0, 52.0, 62.0, None, None, None);
         assert_eq!(pos.x, 52.0);
         assert_eq!(pos.y, 62.0);
-        assert_eq!(size.width, 1348.0);  // 1400 - 52
+        assert_eq!(size.width, 1348.0); // 1400 - 52
         assert_eq!(size.height, 838.0); // 900 - 62
     }
 
@@ -613,7 +701,17 @@ mod tests {
     #[test]
     fn test_bounds_top_overlay() {
         // Panel 3col pos=0 con overlay top 19% → webview arranca más abajo
-        let (pos, size) = calculate_bounds("3col", 0, 1400.0, 900.0, 52.0, 62.0, Some("top"), Some(19.0), None);
+        let (pos, size) = calculate_bounds(
+            "3col",
+            0,
+            1400.0,
+            900.0,
+            52.0,
+            62.0,
+            Some("top"),
+            Some(19.0),
+            None,
+        );
         let available_height = 900.0 - 62.0; // 838
         let overlay_px = available_height * 19.0 / 100.0;
         assert!((pos.y - (62.0 + overlay_px)).abs() < 0.1);
@@ -623,7 +721,17 @@ mod tests {
     #[test]
     fn test_bounds_bottom_overlay() {
         // Panel 3col pos=2 con overlay bottom 28% → webview es más corto
-        let (pos, size) = calculate_bounds("3col", 2, 1400.0, 900.0, 52.0, 62.0, Some("bottom"), Some(28.0), None);
+        let (pos, size) = calculate_bounds(
+            "3col",
+            2,
+            1400.0,
+            900.0,
+            52.0,
+            62.0,
+            Some("bottom"),
+            Some(28.0),
+            None,
+        );
         let available_height = 900.0 - 62.0; // 838
         let overlay_px = available_height * 28.0 / 100.0;
         assert_eq!(pos.y, 62.0); // y no cambia con overlay bottom
