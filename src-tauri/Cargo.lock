@@ -4518,6 +4518,7 @@ dependencies = [
  "tiny_http",
  "tokio",
  "url",
+ "uuid",
  "webview2-com",
  "windows",
 ]

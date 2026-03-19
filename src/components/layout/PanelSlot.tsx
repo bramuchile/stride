@@ -24,7 +24,6 @@ interface Props {
 
 const WIDGET_LABELS: Record<string, { icon: string; label: string }> = {
   notes:        { icon: "📝", label: "Notas" },
-  scratchpad:   { icon: "📝", label: "Notas rápidas" },
   "next-meeting": { icon: "📅", label: "Próxima reunión" },
   weather:      { icon: "🌤", label: "Clima" },
 };
@@ -226,20 +225,26 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
         </>
       ) : (
         <>
-          <div style={{
-            overflow: "hidden",
-            height: presentationMode ? 0 : 32,
-            flexShrink: 0,
-            transition: "height 0.2s ease",
-          }}>
-            <WidgetHeader
-              panel={panel}
-              dynamicMode={dynamicMode}
-              onRemovePanel={onRemovePanel}
-              canRemove={canRemove}
-            />
-          </div>
-          <WidgetPanel panel={panel} />
+          {panel.widget_id !== "notes" && (
+            <div style={{
+              overflow: "hidden",
+              height: presentationMode ? 0 : 32,
+              flexShrink: 0,
+              transition: "height 0.2s ease",
+            }}>
+              <WidgetHeader
+                panel={panel}
+                dynamicMode={dynamicMode}
+                onRemovePanel={onRemovePanel}
+                canRemove={canRemove}
+              />
+            </div>
+          )}
+          <WidgetPanel
+            panel={panel}
+            onRemovePanel={onRemovePanel}
+            canRemove={canRemove}
+          />
         </>
       )}
 

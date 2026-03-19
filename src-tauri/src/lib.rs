@@ -118,6 +118,12 @@ pub fn run() {
             commands::google_auth::connect_google_account,
             commands::google_auth::get_google_account,
             commands::google_auth::disconnect_google_account,
+            commands::notes::get_notes,
+            commands::notes::create_note,
+            commands::notes::update_note,
+            commands::notes::delete_note,
+            commands::notes::get_workspace_widget_state,
+            commands::notes::set_workspace_widget_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stride");

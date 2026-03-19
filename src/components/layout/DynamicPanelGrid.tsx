@@ -11,7 +11,6 @@ const WIDGET_LABELS: Record<string, string> = {
   notes: "Notas",
   "next-meeting": "Próxima reunión",
   weather: "Clima",
-  scratchpad: "Notas rápidas",
 };
 
 // ---  AddPanelPopover --- (usado solo para columnas vacías)
@@ -57,7 +56,6 @@ function AddPanelPopover({ onSelect, onClose }: AddPanelPopoverProps) {
     { id: "notes", label: "Notas" },
     { id: "next-meeting", label: "Próxima reunión" },
     { id: "weather", label: "Clima" },
-    { id: "scratchpad", label: "Notas rápidas" },
   ];
 
   return (
@@ -96,7 +94,7 @@ function AddPanelPopover({ onSelect, onClose }: AddPanelPopoverProps) {
           onClick={() => { onSelect("WIDGET", w.id); onClose(); }}
         >
           <span style={{ fontSize: 14 }}>
-            {w.id === "notes" || w.id === "scratchpad" ? "📝" : w.id === "next-meeting" ? "📅" : "🌤️"}
+            {w.id === "notes" ? "📝" : w.id === "next-meeting" ? "📅" : "🌤️"}
           </span>
           {w.label}
         </button>

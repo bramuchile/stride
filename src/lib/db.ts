@@ -41,27 +41,6 @@ async function runMigrations(db: Database): Promise<void> {
     )
   `);
 
-  // Tabla de notas por panel
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS notes (
-      panel_id       TEXT PRIMARY KEY,
-      content        TEXT NOT NULL DEFAULT '',
-      pinned_content TEXT NOT NULL DEFAULT '',
-      updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
-      created_at     TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Historial de versiones por panel (máx 10 por panel_id)
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS notes_history (
-      id       TEXT PRIMARY KEY,
-      panel_id TEXT NOT NULL,
-      content  TEXT NOT NULL,
-      saved_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-
   await db.execute(`
     CREATE TABLE IF NOT EXISTS bookmarks (
       id          TEXT PRIMARY KEY,
@@ -98,14 +77,43 @@ async function runMigrations(db: Database): Promise<void> {
     }
   }
 
+  const noteColumns = await db.select<{ name: string }[]>("PRAGMA table_info(notes)");
+  const legacyNotes = noteColumns.some((col) => col.name === "panel_id" || col.name === "pinned_content");
+  if (legacyNotes) {
+    await db.execute("DROP TABLE IF EXISTS notes");
+  }
+  await db.execute("DROP TABLE IF EXISTS notes_history");
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS workspace_widget_state (
+      workspace_id TEXT NOT NULL,
+      widget_type TEXT NOT NULL,
+      state_json TEXT NOT NULL DEFAULT '{}',
+      PRIMARY KEY (workspace_id, widget_type)
+    )
+  `);
+
+  await db.execute("UPDATE panels SET widget_id = 'notes' WHERE widget_id = 'scratchpad'");
+  await db.execute("UPDATE panels SET overlay_widget_id = 'notes' WHERE overlay_widget_id = 'scratchpad'");
+
   // Migración de datos: eliminar layouts estáticos y forzar re-seed con layouts dinámicos.
   // Guarda: se ejecuta solo una vez gracias al flag 'migration_dynamic_layouts'.
   const migrationRows = await db.select<{ value: string }[]>(
     "SELECT value FROM settings WHERE key = 'migration_dynamic_layouts'"
   );
   if (migrationRows.length === 0) {
-    await db.execute("DELETE FROM notes_history");
     await db.execute("DELETE FROM notes");
+    await db.execute("DELETE FROM workspace_widget_state");
     await db.execute("DELETE FROM workspace_layouts");
     await db.execute("DELETE FROM panels");
     await db.execute("DELETE FROM workspaces");

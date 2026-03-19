@@ -16,6 +16,7 @@ export interface HourlyPoint {
   temperature: number;
   weatherCode: number;
   precipitationProbability: number;
+  isDay: number; // 0 | 1
 }
 
 export interface DailyPoint {
@@ -31,7 +32,7 @@ export interface WeatherData {
   resolvedName: string; // nombre devuelto por geocoding API
   current: CurrentWeather;
   hourly: HourlyPoint[]; // 6 puntos desde la hora actual
-  daily: DailyPoint[];   // 3 días: hoy + 2
+  daily: DailyPoint[];   // 7 días
   fetchedAt: Date;
 }
 

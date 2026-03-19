@@ -1,18 +1,26 @@
-import { ScratchpadWidget } from "@/components/widgets/scratchpad/ScratchpadWidget";
-import { NotesWidget } from "@/components/widgets/notes/NotesWidget";
+import { NotesWidget } from "@/components/widgets/NotesWidget";
+import { WeatherWidget } from "@/components/widgets/weather/WeatherWidget";
 import type { Panel } from "@/types";
 
 interface Props {
   panel: Panel;
+  onRemovePanel?: () => void;
+  canRemove?: boolean;
 }
 
 // Despachador: mapea widget_id al componente correspondiente
-export function WidgetPanel({ panel }: Props) {
+export function WidgetPanel({ panel, onRemovePanel, canRemove }: Props) {
   switch (panel.widget_id) {
-    case "scratchpad":
-      return <ScratchpadWidget />;
     case "notes":
-      return <NotesWidget panelId={panel.id} panelUrl={panel.url} />;
+      return (
+        <NotesWidget
+          workspaceId={panel.workspace_id}
+          onRemovePanel={onRemovePanel}
+          canRemove={canRemove}
+        />
+      );
+    case "weather":
+      return <WeatherWidget />;
     default:
       return (
         <div className="flex h-full items-center justify-center text-muted-foreground">

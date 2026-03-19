@@ -14,8 +14,8 @@ interface Props {
 async function resetDatabase(): Promise<void> {
   const db = await getDb();
   // Borrar en orden para respetar las dependencias
-  await db.execute("DELETE FROM notes_history");
   await db.execute("DELETE FROM notes");
+  await db.execute("DELETE FROM workspace_widget_state");
   await db.execute("DELETE FROM panels");
   await db.execute("DELETE FROM workspaces");
   await db.execute("DELETE FROM settings");

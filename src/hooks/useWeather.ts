@@ -109,10 +109,10 @@ async function fetchWeatherForCity(city: string): Promise<WeatherData | null> {
       "surface_pressure",
       "is_day",
     ].join(","),
-    hourly: "temperature_2m,weather_code,precipitation_probability",
+    hourly: "temperature_2m,weather_code,precipitation_probability,is_day",
     daily:
       "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-    forecast_days: "3",
+    forecast_days: "7",
     timezone: "auto",
     wind_speed_unit: "kmh",
   });
@@ -144,7 +144,8 @@ async function fetchWeatherForCity(city: string): Promise<WeatherData | null> {
     h.time as string[],
     h.temperature_2m as number[],
     h.weather_code as number[],
-    h.precipitation_probability as number[]
+    h.precipitation_probability as number[],
+    h.is_day as number[]
   );
 
   const daily: DailyPoint[] = (d.time as string[]).map(
@@ -172,7 +173,8 @@ function getNext6Hours(
   times: string[],
   temperatures: number[],
   codes: number[],
-  precipProbs: number[]
+  precipProbs: number[],
+  isDayValues: number[]
 ): HourlyPoint[] {
   const now = new Date();
   // Truncar al inicio de la hora actual
@@ -193,6 +195,7 @@ function getNext6Hours(
         temperature: Math.round(temperatures[i]),
         weatherCode: codes[i],
         precipitationProbability: precipProbs[i] ?? 0,
+        isDay: isDayValues[i] ?? 1,
       });
     }
   }
