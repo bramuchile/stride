@@ -17,6 +17,7 @@ import {
   Type,
 } from "lucide-react";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import type { PanelType, WidgetId } from "@/types";
 
 interface Note {
   id: string;
@@ -28,6 +29,10 @@ interface Note {
 
 interface NotesWidgetProps {
   workspaceId: string;
+  dynamicMode?: boolean;
+  onAddPanelBelow?: (type: PanelType, widgetId?: WidgetId) => void;
+  onAddColumn?: () => void;
+  isLastColumn?: boolean;
   onCollapse?: () => void;
   onRemovePanel?: () => void;
   canRemove?: boolean;
@@ -78,6 +83,10 @@ function prefixLine(textarea: HTMLTextAreaElement, prefix: string) {
 
 export function NotesWidget({
   workspaceId,
+  dynamicMode,
+  onAddPanelBelow,
+  onAddColumn,
+  isLastColumn,
   onCollapse,
   onRemovePanel,
   canRemove,
@@ -95,6 +104,7 @@ export function NotesWidget({
   const [fontSizeIndex, setFontSizeIndex] = useState(0);
   const [saveState, setSaveState] = useState<"saved" | "saving">("saved");
   const [loading, setLoading] = useState(true);
+  const [showSplitPopover, setShowSplitPopover] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<number | null>(null);
 
@@ -261,6 +271,110 @@ export function NotesWidget({
           <Plus size={13} />
           Nueva
         </button>
+        {dynamicMode && (
+          <>
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setShowSplitPopover((value) => !value)}
+                title="Dividir panel"
+                style={{
+                  width: 22,
+                  height: 22,
+                  background: showSplitPopover ? "#242133" : "transparent",
+                  border: "none",
+                  color: showSplitPopover ? "#c7bcff" : "var(--text3)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 4,
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <rect x="1" y="1" width="11" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                  <rect x="1" y="7" width="11" height="5" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                </svg>
+              </button>
+              {showSplitPopover && onAddPanelBelow && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 4px)",
+                    right: 0,
+                    zIndex: 200,
+                    minWidth: 160,
+                    background: "#1e1c2a",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 10,
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                    padding: "6px 4px",
+                  }}
+                >
+                  {([
+                    { type: "WEB" as const, icon: "🌐", label: "Navegador web", highlight: true },
+                    { type: "WIDGET" as const, widgetId: "notes" as WidgetId, icon: "📝", label: "Notas" },
+                    { type: "WIDGET" as const, widgetId: "next-meeting" as WidgetId, icon: "📅", label: "Próxima reunión" },
+                    { type: "WIDGET" as const, widgetId: "system-monitor" as WidgetId, icon: "🖥️", label: "Monitor de sistema" },
+                    { type: "WIDGET" as const, widgetId: "uptime-monitor" as WidgetId, icon: "📡", label: "Uptime monitor" },
+                    { type: "WIDGET" as const, widgetId: "weather" as WidgetId, icon: "🌤️", label: "Clima" },
+                  ]).map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        onAddPanelBelow(opt.type, "widgetId" in opt ? opt.widgetId : undefined);
+                        setShowSplitPopover(false);
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontSize: 12,
+                        color: opt.highlight ? "#c7bcff" : "var(--text2)",
+                        background: "transparent",
+                        border: "none",
+                        width: "100%",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span style={{ fontSize: 14 }}>{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {isLastColumn && onAddColumn && (
+              <button
+                onClick={onAddColumn}
+                title="Añadir columna"
+                style={{
+                  width: 22,
+                  height: 22,
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text3)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 4,
+                  flexShrink: 0,
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+                  <rect x="1" y="1" width="6" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+                  <rect x="9" y="4" width="3" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 1" />
+                  <line x1="10.5" y1="5.5" x2="10.5" y2="7.5" stroke="currentColor" strokeWidth="1.2" />
+                  <line x1="9.5" y1="6.5" x2="11.5" y2="6.5" stroke="currentColor" strokeWidth="1.2" />
+                </svg>
+              </button>
+            )}
+          </>
+        )}
         {canRemove && onRemovePanel && (
           <button
             onClick={onRemovePanel}

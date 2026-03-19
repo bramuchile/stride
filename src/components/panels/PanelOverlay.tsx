@@ -1,4 +1,4 @@
-import { NotesWidget } from "@/components/widgets/NotesWidget";
+import { NotesWidget } from "@/components/widgets/notes/NotesWidget";
 import { NextMeetingWidget } from "@/components/widgets/next-meeting/NextMeetingWidget";
 import { WeatherWidget } from "@/components/widgets/weather/WeatherWidget";
 import type { Panel, WidgetId } from "@/types";
@@ -13,6 +13,8 @@ interface Props {
 const WIDGET_META: Record<WidgetId, { label: string; dotColor: string; lineColor: string }> = {
   "next-meeting": { label: "próxima reunión", dotColor: "var(--accent)", lineColor: "var(--accent)" },
   "notes":        { label: "notas",           dotColor: "var(--accent)", lineColor: "var(--accent)" },
+  "system-monitor": { label: "monitor de sistema", dotColor: "var(--accent)", lineColor: "var(--accent)" },
+  "uptime-monitor": { label: "uptime monitor", dotColor: "var(--accent)", lineColor: "var(--accent)" },
   // WeatherWidget gestiona su propio header con --wx dinámico; estas props son requeridas por el tipo Record
   "weather":      { label: "clima",            dotColor: "var(--blue)",   lineColor: "var(--blue)" },
 };

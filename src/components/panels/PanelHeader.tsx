@@ -627,6 +627,8 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
                       { type: "WEB" as const, icon: "🌐", label: "Navegador web", highlight: true },
                       { type: "WIDGET" as const, widgetId: "notes" as WidgetId, icon: "📝", label: "Notas" },
                       { type: "WIDGET" as const, widgetId: "next-meeting" as WidgetId, icon: "📅", label: "Próxima reunión" },
+                      { type: "WIDGET" as const, widgetId: "system-monitor" as WidgetId, icon: "🖥️", label: "Monitor de sistema" },
+                      { type: "WIDGET" as const, widgetId: "uptime-monitor" as WidgetId, icon: "📡", label: "Uptime monitor" },
                       { type: "WIDGET" as const, widgetId: "weather" as WidgetId, icon: "🌤️", label: "Clima" },
                     ]).map((opt, i) => (
                       <button

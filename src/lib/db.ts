@@ -103,6 +103,16 @@ async function runMigrations(db: Database): Promise<void> {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS uptime_hosts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      interval_secs INTEGER NOT NULL DEFAULT 60,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    )
+  `);
+
   await db.execute("UPDATE panels SET widget_id = 'notes' WHERE widget_id = 'scratchpad'");
   await db.execute("UPDATE panels SET overlay_widget_id = 'notes' WHERE overlay_widget_id = 'scratchpad'");
 

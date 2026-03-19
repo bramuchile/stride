@@ -3,6 +3,8 @@ mod filters;
 mod google_auth;
 
 use commands::permissions::{self, PermissionCache};
+use commands::system_stats::SysinfoState;
+use commands::uptime_monitor::{load_hosts_from_db, spawn_uptime_loops, UptimeState};
 use commands::webview::WebviewRegistry;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -10,8 +12,13 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let sysinfo_state = SysinfoState::new();
+    let uptime_state = Arc::new(UptimeState::new());
+
     tauri::Builder::default()
-        .setup(|app| {
+        .manage(sysinfo_state)
+        .manage(uptime_state.clone())
+        .setup(move |app| {
             // Crear directorio de datos si no existe (máquina limpia)
             let data_dir = app.path().app_data_dir()?;
             if let Err(e) = std::fs::create_dir_all(&data_dir) {
@@ -90,6 +97,17 @@ pub fn run() {
             .visible(false)
             .build();
 
+            match load_hosts_from_db(&app.handle()) {
+                Ok(hosts) => {
+                    *uptime_state.hosts.lock().unwrap() = hosts;
+                }
+                Err(error) => {
+                    eprintln!("[Stride] No se pudieron cargar uptime_hosts: {error}");
+                }
+            }
+
+            spawn_uptime_loops(app.handle().clone(), uptime_state.clone());
+
             Ok(())
         })
         .manage(WebviewRegistry(Mutex::new(HashMap::new())))
@@ -124,6 +142,12 @@ pub fn run() {
             commands::notes::delete_note,
             commands::notes::get_workspace_widget_state,
             commands::notes::set_workspace_widget_state,
+            commands::system_stats::get_system_stats,
+            commands::system_stats::get_top_processes,
+            commands::uptime_monitor::get_uptime_hosts,
+            commands::uptime_monitor::get_uptime_history,
+            commands::uptime_monitor::add_uptime_host,
+            commands::uptime_monitor::remove_uptime_host,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Stride");

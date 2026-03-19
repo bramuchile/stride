@@ -16,6 +16,7 @@ async function resetDatabase(): Promise<void> {
   // Borrar en orden para respetar las dependencias
   await db.execute("DELETE FROM notes");
   await db.execute("DELETE FROM workspace_widget_state");
+  await db.execute("DELETE FROM uptime_hosts");
   await db.execute("DELETE FROM panels");
   await db.execute("DELETE FROM workspaces");
   await db.execute("DELETE FROM settings");

@@ -1,7 +1,7 @@
 export type LayoutType = "dynamic";
 export type LayoutTemplate = "free" | "double" | "triple" | "quad";
 export type PanelType = "WEB" | "WIDGET";
-export type WidgetId = "next-meeting" | "notes" | "weather";
+export type WidgetId = "next-meeting" | "notes" | "system-monitor" | "uptime-monitor" | "weather";
 
 export interface Workspace {
   id: string;
@@ -66,3 +66,5 @@ export interface AppError {
   timestamp: string;
   version: string;
 }
+
+export * from "./widgets";

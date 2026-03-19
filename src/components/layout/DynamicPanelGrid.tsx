@@ -10,6 +10,8 @@ const MIN_ROW_FRAC = 0.08;
 const WIDGET_LABELS: Record<string, string> = {
   notes: "Notas",
   "next-meeting": "Próxima reunión",
+  "system-monitor": "Monitor de sistema",
+  "uptime-monitor": "Uptime monitor",
   weather: "Clima",
 };
 
@@ -55,6 +57,8 @@ function AddPanelPopover({ onSelect, onClose }: AddPanelPopoverProps) {
   const widgets: { id: WidgetId; label: string }[] = [
     { id: "notes", label: "Notas" },
     { id: "next-meeting", label: "Próxima reunión" },
+    { id: "system-monitor", label: "Monitor de sistema" },
+    { id: "uptime-monitor", label: "Uptime monitor" },
     { id: "weather", label: "Clima" },
   ];
 
@@ -94,7 +98,15 @@ function AddPanelPopover({ onSelect, onClose }: AddPanelPopoverProps) {
           onClick={() => { onSelect("WIDGET", w.id); onClose(); }}
         >
           <span style={{ fontSize: 14 }}>
-            {w.id === "notes" ? "📝" : w.id === "next-meeting" ? "📅" : "🌤️"}
+            {w.id === "notes"
+              ? "📝"
+              : w.id === "next-meeting"
+                ? "📅"
+                : w.id === "system-monitor"
+                  ? "🖥️"
+                  : w.id === "uptime-monitor"
+                    ? "📡"
+                    : "🌤️"}
           </span>
           {w.label}
         </button>
