@@ -17,6 +17,8 @@ import {
   Type,
 } from "lucide-react";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
+import type { DraggableAttributes } from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
 import type { PanelType, WidgetId } from "@/types";
 
 interface Note {
@@ -36,6 +38,9 @@ interface NotesWidgetProps {
   onCollapse?: () => void;
   onRemovePanel?: () => void;
   canRemove?: boolean;
+  dragListeners?: SyntheticListenerMap;
+  dragAttributes?: DraggableAttributes;
+  isColumnHandle?: boolean;
 }
 
 const ACCENT = "#7c6af5";
@@ -90,6 +95,9 @@ export function NotesWidget({
   onCollapse,
   onRemovePanel,
   canRemove,
+  dragListeners,
+  dragAttributes,
+  isColumnHandle,
 }: NotesWidgetProps) {
   const { data: workspaces = [] } = useWorkspaces();
   const workspace = workspaces.find((item) => item.id === workspaceId);
@@ -253,6 +261,28 @@ export function NotesWidget({
   return (
     <div style={{ display: "flex", flexDirection: "column", width: "100%", height: "100%", background: "linear-gradient(180deg, #16151f 0%, #0f0e18 100%)", color: "var(--text)", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, height: 44, padding: "0 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", background: "rgba(15,14,24,0.88)", flexShrink: 0 }}>
+        {dragAttributes && (
+          <button
+            type="button"
+            className={`grip-handle ${isColumnHandle ? "grip-col" : "grip-panel"}`}
+            {...dragAttributes}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              dragListeners?.onPointerDown?.(e as unknown as PointerEvent);
+            }}
+            aria-label={isColumnHandle ? "Drag to reorder column" : "Drag to reorder panel"}
+            style={{ flexShrink: 0 }}
+          >
+            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+              <circle cx="2" cy="2" r="1.5" />
+              <circle cx="8" cy="2" r="1.5" />
+              <circle cx="2" cy="7" r="1.5" />
+              <circle cx="8" cy="7" r="1.5" />
+              <circle cx="2" cy="12" r="1.5" />
+              <circle cx="8" cy="12" r="1.5" />
+            </svg>
+          </button>
+        )}
         <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
           <FileText size={15} color={ACCENT} />
           <span style={{ fontSize: 13, fontWeight: 600 }}>Notas</span>

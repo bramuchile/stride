@@ -3,9 +3,12 @@ import { ChevronLeft, ChevronRight, RotateCcw, Star } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { AddressBar } from "./AddressBar";
+import { GripHandle } from "./GripHandle";
 import { useUpdatePanel } from "@/hooks/usePanels";
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useBookmarks } from "@/hooks/useBookmarks";
+import type { DraggableAttributes } from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
 import type { Panel, PanelType, WidgetId } from "@/types";
 
 interface Props {
@@ -17,6 +20,11 @@ interface Props {
   isLastColumn?: boolean;
   onRemovePanel?: () => void;
   canRemove?: boolean;
+  panelIndex: number;
+  columnDragId: string;
+  panelDragId: string;
+  dragListeners?: SyntheticListenerMap;
+  dragAttributes?: DraggableAttributes;
 }
 
 function getDomain(url?: string): string {
@@ -49,7 +57,20 @@ function getFaviconUrl(url?: string): string | null {
   }
 }
 
-export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn, onRemovePanel, canRemove }: Props) {
+export function PanelHeader({
+  panel,
+  dynamicMode,
+  onAddPanelBelow,
+  onAddColumn,
+  isLastColumn,
+  onRemovePanel,
+  canRemove,
+  panelIndex,
+  columnDragId,
+  panelDragId,
+  dragListeners,
+  dragAttributes,
+}: Props) {
   const [headerHovered, setHeaderHovered] = useState(false);
   const [showAddressBar, setShowAddressBar] = useState(false);
   const [showSplitPopover, setShowSplitPopover] = useState(false);
@@ -235,7 +256,7 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
 
   return (
     <div
-      className="relative flex flex-shrink-0 items-center gap-2 px-[10px]"
+      className="panel-header relative flex flex-shrink-0 items-center gap-2 px-[10px]"
       onMouseEnter={() => setHeaderHovered(true)}
       onMouseLeave={() => setHeaderHovered(false)}
       style={{
@@ -253,6 +274,13 @@ export function PanelHeader({ panel, dynamicMode, onAddPanelBelow, onAddColumn, 
         />
       ) : (
         <>
+          <GripHandle
+            isColumnHandle={panelIndex === 0}
+            listeners={dragListeners}
+            attributes={dragAttributes}
+            dragId={panelIndex === 0 ? columnDragId : panelDragId}
+          />
+
           {/* Atrás */}
           <button
             onClick={handleBack}

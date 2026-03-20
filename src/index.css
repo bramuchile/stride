@@ -153,3 +153,35 @@ body::before {
   to   { opacity: 1; }
 }
 .nt-search-input::placeholder { color: rgba(255,255,255,0.28); }
+
+.grip-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+  cursor: grab;
+}
+
+.grip-handle:active {
+  cursor: grabbing;
+}
+
+.grip-col {
+  color: #7c6af5;
+}
+
+.grip-panel {
+  color: var(--color-text-tertiary, #888);
+}
+
+.panel-header:hover .grip-handle {
+  opacity: 1;
+}

@@ -1,6 +1,23 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DraggableAttributes,
+} from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { PanelSlot } from "./PanelSlot";
 import { COL_RESIZER_W, ROW_RESIZER_H } from "@/hooks/useDynamicLayout";
+import { useDraggable } from "@/hooks/usePanelDrag";
 import type { DynamicLayout, Panel, PanelType, WidgetId } from "@/types";
 
 const MIN_COL_FRAC = 0.1;
@@ -268,6 +285,201 @@ interface Props {
   onRemovePanel: (panelId: string) => Promise<void>;
 }
 
+interface SortablePanelItemProps {
+  panel: Panel;
+  dynPanel: DynamicLayout["columns"][number]["panels"][number];
+  rowIdx: number;
+  colIdx: number;
+  lastColIdx: number;
+  canRemove: boolean;
+  onAddPanel: (colIdx: number, type: PanelType, widgetId?: WidgetId) => Promise<void>;
+  onAddColumn: () => void;
+  onRemovePanel: (panelId: string) => Promise<void>;
+  colDragListeners?: SyntheticListenerMap;
+  colDragAttributes?: DraggableAttributes;
+}
+
+function SortablePanelItem({
+  panel,
+  dynPanel,
+  rowIdx,
+  colIdx,
+  lastColIdx,
+  canRemove,
+  onAddPanel,
+  onAddColumn,
+  onRemovePanel,
+  colDragListeners,
+  colDragAttributes,
+}: SortablePanelItemProps) {
+  const panelDragId = `panel::${dynPanel.panel_id}`;
+  const panelDrag = useDraggable(panelDragId);
+  const isColumnHandle = rowIdx === 0;
+
+  return (
+    <div
+      ref={panelDrag.ref}
+      style={{
+        flex: dynPanel.height_frac,
+        minHeight: 0,
+        overflow: "hidden",
+        ...panelDrag.style,
+        opacity: panelDrag.isDragging ? 0.8 : 1,
+        zIndex: panelDrag.isDragging ? 20 : "auto",
+      }}
+    >
+      <PanelSlot
+        panel={panel}
+        layout="dynamic"
+        dynamicMode={true}
+        onAddPanelBelow={(type, widgetId) => {
+          onAddPanel(colIdx, type, widgetId).catch(console.error);
+        }}
+        onAddColumn={colIdx === lastColIdx ? onAddColumn : undefined}
+        isLastColumn={colIdx === lastColIdx}
+        onRemovePanel={() => onRemovePanel(dynPanel.panel_id).catch(console.error)}
+        canRemove={canRemove}
+        panelIndex={rowIdx}
+        columnDragId={`col::${colIdx}`}
+        panelDragId={panelDragId}
+        dragListeners={isColumnHandle ? colDragListeners : panelDrag.listeners}
+        dragAttributes={isColumnHandle ? colDragAttributes : panelDrag.attributes}
+        isColumnHandle={isColumnHandle}
+      />
+    </div>
+  );
+}
+
+interface SortableColumnProps {
+  col: DynamicLayout["columns"][number];
+  colIdx: number;
+  lastColIdx: number;
+  panelMap: Record<string, Panel>;
+  canRemove: boolean;
+  emptyColPopover: number | null;
+  setEmptyColPopover: React.Dispatch<React.SetStateAction<number | null>>;
+  onAddPanel: (colIdx: number, type: PanelType, widgetId?: WidgetId) => Promise<void>;
+  onAddColumn: () => void;
+  onRemovePanel: (panelId: string) => Promise<void>;
+  handleRowResizerMouseDown: (colIdx: number, rowIdx: number, e: React.MouseEvent) => void;
+}
+
+function SortableColumn({
+  col,
+  colIdx,
+  lastColIdx,
+  panelMap,
+  canRemove,
+  emptyColPopover,
+  setEmptyColPopover,
+  onAddPanel,
+  onAddColumn,
+  onRemovePanel,
+  handleRowResizerMouseDown,
+}: SortableColumnProps) {
+  const columnDragId = `col::${colIdx}`;
+  const colDrag = useDraggable(columnDragId);
+
+  return (
+    <div
+      ref={colDrag.ref}
+      style={{
+        flex: col.width_frac,
+        minWidth: 0,
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        overflow: "hidden",
+        ...colDrag.style,
+        opacity: colDrag.isDragging ? 0.9 : 1,
+        zIndex: colDrag.isDragging ? 30 : "auto",
+      }}
+    >
+      {col.panels.length === 0 ? (
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "var(--text4)",
+            fontSize: 12,
+            background: "var(--base)",
+            position: "relative",
+            gap: 8,
+          }}
+        >
+          <span>Columna vacía</span>
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setEmptyColPopover(colIdx)}
+              style={{
+                padding: "4px 14px",
+                borderRadius: 6,
+                background: "var(--elevated2)",
+                border: "1px solid var(--border2)",
+                color: "var(--text2)",
+                fontSize: 11,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <span>+</span> Añadir panel
+            </button>
+            {emptyColPopover === colIdx && (
+              <AddPanelPopover
+                onSelect={(type, widgetId) => {
+                  onAddPanel(colIdx, type, widgetId).catch(console.error);
+                  setEmptyColPopover(null);
+                }}
+                onClose={() => setEmptyColPopover(null)}
+              />
+            )}
+          </div>
+        </div>
+      ) : (
+        <SortableContext
+          items={col.panels.map((p) => `panel::${p.panel_id}`)}
+          strategy={verticalListSortingStrategy}
+        >
+          {col.panels.map((dynPanel, rowIdx) => {
+            const panel = panelMap[dynPanel.panel_id];
+            if (!panel) return null;
+            return (
+              <React.Fragment key={dynPanel.panel_id}>
+                <SortablePanelItem
+                  panel={panel}
+                  dynPanel={dynPanel}
+                  rowIdx={rowIdx}
+                  colIdx={colIdx}
+                  lastColIdx={lastColIdx}
+                  canRemove={canRemove}
+                  onAddPanel={onAddPanel}
+                  onAddColumn={onAddColumn}
+                  onRemovePanel={onRemovePanel}
+                  colDragListeners={rowIdx === 0 ? colDrag.listeners : undefined}
+                  colDragAttributes={rowIdx === 0 ? colDrag.attributes : undefined}
+                />
+                {rowIdx < col.panels.length - 1 && (
+                  <RowResizer
+                    colIdx={colIdx}
+                    rowIdx={rowIdx}
+                    onMouseDown={handleRowResizerMouseDown}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </SortableContext>
+      )}
+    </div>
+  );
+}
+
 export function DynamicPanelGrid({
   panels,
   dynamicLayout,
@@ -287,6 +499,11 @@ export function DynamicPanelGrid({
 
   const totalPanels = dynamicLayout.columns.reduce((sum, col) => sum + col.panels.length, 0);
   const canRemove = totalPanels > 1;
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
 
   // --- Column resize ---
   const handleColResizerMouseDown = useCallback(
@@ -414,114 +631,74 @@ export function DynamicPanelGrid({
 
   const lastColIdx = dynamicLayout.columns.length - 1;
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ display: "flex", height: "100%", width: "100%", overflow: "hidden" }}
-    >
-      {dynamicLayout.columns.map((col, colIdx) => (
-        <React.Fragment key={colIdx}>
-          {/* Columna */}
-          <div
-            style={{
-              flex: col.width_frac,
-              minWidth: 0,
-              height: "100%",
-              display: "flex",
-              flexDirection: "column",
-              position: "relative",
-              overflow: "hidden",
-            }}
-          >
-            {/* Paneles en la columna */}
-            {col.panels.length === 0 ? (
-              // Columna vacía — placeholder con botón para añadir primer panel
-              <div
-                style={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--text4)",
-                  fontSize: 12,
-                  background: "var(--base)",
-                  position: "relative",
-                  gap: 8,
-                }}
-              >
-                <span>Columna vacía</span>
-                <div style={{ position: "relative" }}>
-                  <button
-                    onClick={() => setEmptyColPopover(colIdx)}
-                    style={{
-                      padding: "4px 14px",
-                      borderRadius: 6,
-                      background: "var(--elevated2)",
-                      border: "1px solid var(--border2)",
-                      color: "var(--text2)",
-                      fontSize: 11,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
-                  >
-                    <span>+</span> Añadir panel
-                  </button>
-                  {emptyColPopover === colIdx && (
-                    <AddPanelPopover
-                      onSelect={(type, widgetId) => {
-                        onAddPanel(colIdx, type, widgetId).catch(console.error);
-                        setEmptyColPopover(null);
-                      }}
-                      onClose={() => setEmptyColPopover(null)}
-                    />
-                  )}
-                </div>
-              </div>
-            ) : (
-              col.panels.map((dynPanel, rowIdx) => {
-                const panel = panelMap[dynPanel.panel_id];
-                if (!panel) return null;
-                return (
-                  <React.Fragment key={dynPanel.panel_id}>
-                    <div
-                      style={{ flex: dynPanel.height_frac, minHeight: 0, overflow: "hidden" }}
-                    >
-                      <PanelSlot
-                        panel={panel}
-                        layout="dynamic"
-                        dynamicMode={true}
-                        onAddPanelBelow={(type, widgetId) => {
-                          onAddPanel(colIdx, type, widgetId).catch(console.error);
-                        }}
-                        onAddColumn={colIdx === lastColIdx ? onAddColumn : undefined}
-                        isLastColumn={colIdx === lastColIdx}
-                        onRemovePanel={() => onRemovePanel(dynPanel.panel_id).catch(console.error)}
-                        canRemove={canRemove}
-                      />
-                    </div>
-                    {rowIdx < col.panels.length - 1 && (
-                      <RowResizer
-                        colIdx={colIdx}
-                        rowIdx={rowIdx}
-                        onMouseDown={handleRowResizerMouseDown}
-                      />
-                    )}
-                  </React.Fragment>
-                );
-              })
-            )}
-          </div>
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-          {/* Resizer de columna */}
-          {colIdx < dynamicLayout.columns.length - 1 && (
-            <ColumnResizer colIdx={colIdx} onMouseDown={handleColResizerMouseDown} />
-          )}
-        </React.Fragment>
-      ))}
-    </div>
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    if (activeId.startsWith("col::") && overId.startsWith("col::")) {
+      const cols = dynamicLayout.columns;
+      const ids = cols.map((_, i) => `col::${i}`);
+      const oldIdx = ids.indexOf(activeId);
+      const newIdx = ids.indexOf(overId);
+      if (oldIdx < 0 || newIdx < 0) return;
+      const newCols = arrayMove(cols, oldIdx, newIdx);
+      onLayoutChange({ columns: newCols });
+      return;
+    }
+
+    if (activeId.startsWith("panel::") && overId.startsWith("panel::")) {
+      const activePanel = activeId.replace("panel::", "");
+      const overPanel = overId.replace("panel::", "");
+
+      const newCols = dynamicLayout.columns.map((col) => {
+        const ids = col.panels.map((p) => p.panel_id);
+        if (!ids.includes(activePanel) || !ids.includes(overPanel)) return col;
+        const oldIdx = ids.indexOf(activePanel);
+        const newIdx = ids.indexOf(overPanel);
+        if (oldIdx < 0 || newIdx < 0) return col;
+        return { ...col, panels: arrayMove(col.panels, oldIdx, newIdx) };
+      });
+      onLayoutChange({ columns: newCols });
+    }
+  }
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <div
+        ref={containerRef}
+        style={{ display: "flex", height: "100%", width: "100%", overflow: "hidden" }}
+      >
+        <SortableContext
+          items={dynamicLayout.columns.map((_, i) => `col::${i}`)}
+          strategy={horizontalListSortingStrategy}
+        >
+          {dynamicLayout.columns.map((col, colIdx) => (
+            <React.Fragment key={`col::${colIdx}`}>
+              <SortableColumn
+                col={col}
+                colIdx={colIdx}
+                lastColIdx={lastColIdx}
+                panelMap={panelMap}
+                canRemove={canRemove}
+                emptyColPopover={emptyColPopover}
+                setEmptyColPopover={setEmptyColPopover}
+                onAddPanel={onAddPanel}
+                onAddColumn={onAddColumn}
+                onRemovePanel={onRemovePanel}
+                handleRowResizerMouseDown={handleRowResizerMouseDown}
+              />
+
+              {colIdx < dynamicLayout.columns.length - 1 && (
+                <ColumnResizer colIdx={colIdx} onMouseDown={handleColResizerMouseDown} />
+              )}
+            </React.Fragment>
+          ))}
+        </SortableContext>
+      </div>
+    </DndContext>
   );
 }
 

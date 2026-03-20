@@ -199,7 +199,44 @@ export function useWebviews(
 
     activate().catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeWorkspaceId, panels, layout, dynamicLayoutKey]); // FIX 1: key estable
+  }, [activeWorkspaceId, panels, layout]); // dynamicLayoutKey excluido: los cambios de layout solo reposicionan, no navegan
+
+  // Reposicionar WebViews cuando cambia el layout dinámico (carga inicial + arrastre de resizers).
+  // No hace hide/show/navigate — solo ajusta bounds.
+  useEffect(() => {
+    if (!dynamicLayout) return;
+    const webPanels = panels.filter((p) => p.type === "WEB" && webviewMap[p.id]);
+    if (webPanels.length === 0) return;
+
+    const isPresentation = presentationModeRef.current;
+    const panelBarH = isPresentation ? 0 : PANEL_BAR_HEIGHT;
+    const headerH = isPresentation ? TITLEBAR_HEIGHT : HEADER_HEIGHT;
+
+    const doResize = async () => {
+      const { containerW, cssContainerH } = await getContainerDimensions();
+      const containerH = cssContainerH - panelBarH;
+      const dynMap = buildDynamicFracMap(webPanels, dynamicLayout, containerW, containerH, cssContainerH, panelBarH);
+      const toResize: PanelLayoutInfo[] = webPanels.map((p) => ({
+        panel_id: p.id,
+        position: p.position,
+        overlay_position: p.overlay_position ?? null,
+        overlay_height_pct: p.overlay_height_pct ?? null,
+        custom_x_frac: dynMap[p.id]?.x_frac ?? null,
+        custom_width_frac: dynMap[p.id]?.w_frac ?? null,
+        custom_y_frac: dynMap[p.id]?.y_frac ?? null,
+        custom_height_frac: dynMap[p.id]?.h_frac ?? null,
+      }));
+      await invoke("resize_panel_webviews", {
+        panels: toResize,
+        layout,
+        sidebarWidth: SIDEBAR_WIDTH,
+        headerHeight: headerH,
+      });
+    };
+
+    doResize().catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dynamicLayoutKey]); // Solo responde a cambios de layout — nunca navega
 
   // Reposicionar webviews al redimensionar la ventana
   useEffect(() => {

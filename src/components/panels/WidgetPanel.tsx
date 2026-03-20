@@ -3,6 +3,8 @@ import { SystemMonitorWidget } from "@/components/widgets/system-monitor/SystemM
 import { UptimeMonitorWidget } from "@/components/widgets/uptime-monitor/UptimeMonitorWidget";
 import { WeatherWidget } from "@/components/widgets/weather/WeatherWidget";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { DraggableAttributes } from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
 import type { Panel, PanelType, WidgetId } from "@/types";
 
 interface Props {
@@ -13,6 +15,9 @@ interface Props {
   isLastColumn?: boolean;
   onRemovePanel?: () => void;
   canRemove?: boolean;
+  dragListeners?: SyntheticListenerMap;
+  dragAttributes?: DraggableAttributes;
+  isColumnHandle?: boolean;
 }
 
 // Despachador: mapea widget_id al componente correspondiente
@@ -24,6 +29,9 @@ export function WidgetPanel({
   isLastColumn,
   onRemovePanel,
   canRemove,
+  dragListeners,
+  dragAttributes,
+  isColumnHandle,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -60,6 +68,9 @@ export function WidgetPanel({
           isLastColumn={isLastColumn}
           onRemovePanel={onRemovePanel}
           canRemove={canRemove}
+          dragListeners={dragListeners}
+          dragAttributes={dragAttributes}
+          isColumnHandle={isColumnHandle}
         />
       );
       break;

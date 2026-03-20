@@ -8,6 +8,8 @@ import { PanelOverlay, PanelOverlayCollapsedBar } from "@/components/panels/Pane
 import { useWorkspaceStore } from "@/store/useWorkspaceStore";
 import { useUpdatePanel } from "@/hooks/usePanels";
 import { SIDEBAR_WIDTH, HEADER_HEIGHT } from "@/hooks/useWebviews";
+import type { DraggableAttributes } from "@dnd-kit/core";
+import type { SyntheticListenerMap } from "@dnd-kit/core/dist/hooks/utilities";
 import type { Panel, PanelType, WidgetId } from "@/types";
 
 interface Props {
@@ -20,6 +22,12 @@ interface Props {
   isLastColumn?: boolean;
   onRemovePanel?: () => void;
   canRemove?: boolean;
+  panelIndex?: number;
+  columnDragId?: string;
+  panelDragId?: string;
+  dragListeners?: SyntheticListenerMap;
+  dragAttributes?: DraggableAttributes;
+  isColumnHandle?: boolean;
 }
 
 const WIDGET_LABELS: Record<string, { icon: string; label: string }> = {
@@ -38,6 +46,9 @@ function WidgetHeader({
   isLastColumn,
   onRemovePanel,
   canRemove,
+  dragListeners,
+  dragAttributes,
+  isColumnHandle,
 }: {
   panel: Panel;
   dynamicMode?: boolean;
@@ -46,6 +57,12 @@ function WidgetHeader({
   isLastColumn?: boolean;
   onRemovePanel?: () => void;
   canRemove?: boolean;
+  panelIndex?: number;
+  columnDragId?: string;
+  panelDragId?: string;
+  dragListeners?: SyntheticListenerMap;
+  dragAttributes?: DraggableAttributes;
+  isColumnHandle?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [showSplitPopover, setShowSplitPopover] = useState(false);
@@ -53,7 +70,7 @@ function WidgetHeader({
 
   return (
     <div
-      className="flex flex-shrink-0 items-center gap-2 px-[10px]"
+      className="panel-header flex flex-shrink-0 items-center gap-2 px-[10px]"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -62,6 +79,30 @@ function WidgetHeader({
         borderBottom: "1px solid var(--border)",
       }}
     >
+      {dragAttributes && (
+        <div style={{ display: "flex", flexShrink: 0 }}>
+          <button
+            type="button"
+            className={`grip-handle ${isColumnHandle ? "grip-col" : "grip-panel"}`}
+            {...dragAttributes}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              dragListeners?.onPointerDown?.(e as unknown as PointerEvent);
+            }}
+            aria-label={isColumnHandle ? "Drag to reorder column" : "Drag to reorder panel"}
+          >
+            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true">
+              <circle cx="2" cy="2" r="1.5" />
+              <circle cx="8" cy="2" r="1.5" />
+              <circle cx="2" cy="7" r="1.5" />
+              <circle cx="8" cy="7" r="1.5" />
+              <circle cx="2" cy="12" r="1.5" />
+              <circle cx="8" cy="12" r="1.5" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{meta.icon}</span>
       <span
         className="flex-1 truncate min-w-0"
@@ -191,7 +232,22 @@ function WidgetHeader({
   );
 }
 
-export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddColumn, isLastColumn, onRemovePanel, canRemove }: Props) {
+export function PanelSlot({
+  panel,
+  layout,
+  dynamicMode,
+  onAddPanelBelow,
+  onAddColumn,
+  isLastColumn,
+  onRemovePanel,
+  canRemove,
+  panelIndex = 0,
+  columnDragId = "",
+  panelDragId = "",
+  dragListeners,
+  dragAttributes,
+  isColumnHandle = false,
+}: Props) {
   const [overlayCollapsed, setOverlayCollapsed] = useState(false);
   const { webviewMap, setWebviewUrl, presentationMode } = useWorkspaceStore();
   const updatePanel = useUpdatePanel();
@@ -274,6 +330,11 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
               isLastColumn={isLastColumn}
               onRemovePanel={onRemovePanel}
               canRemove={canRemove}
+              panelIndex={panelIndex}
+              columnDragId={columnDragId}
+              panelDragId={panelDragId}
+              dragListeners={dragListeners}
+              dragAttributes={dragAttributes}
             />
           </div>
 
@@ -337,6 +398,12 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
                 isLastColumn={isLastColumn}
                 onRemovePanel={onRemovePanel}
                 canRemove={canRemove}
+                panelIndex={panelIndex}
+                columnDragId={columnDragId}
+                panelDragId={panelDragId}
+                dragListeners={dragListeners}
+                dragAttributes={dragAttributes}
+                isColumnHandle={isColumnHandle}
               />
             </div>
           )}
@@ -348,6 +415,9 @@ export function PanelSlot({ panel, layout, dynamicMode, onAddPanelBelow, onAddCo
             isLastColumn={isLastColumn}
             onRemovePanel={onRemovePanel}
             canRemove={canRemove}
+            dragListeners={dragListeners}
+            dragAttributes={dragAttributes}
+            isColumnHandle={isColumnHandle}
           />
         </>
       )}
