@@ -2,7 +2,8 @@
 name = "stride"
 version = "0.3.5"
 description = "Stride — centro de control de productividad"
-authors = ["you"]
+authors = ["bramuchile"]
+license = "MIT"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
